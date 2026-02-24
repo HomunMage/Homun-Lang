@@ -369,8 +369,8 @@ names := @["Alice", "Bob", "Charlie"]
 List comprehension:
 
 ```
-squares := @[x * x for x in upto(10)]
-evens   := @[x for x in upto(20) if x % 2 == 0]
+squares := @[x * x for x in steps(1, 10)]
+evens   := @[x for x in steps(1, 20) if x % 2 == 0]
 ```
 
 ### Dicts (Hash Maps)
@@ -384,7 +384,7 @@ Dict comprehension:
 
 ```
 inverted := @{v: k for k, v in scores}
-squared  := @{x: x*x for x in upto(5)}
+squared  := @{x: x*x for x in steps(1, 5)}
 ```
 
 Dict access and update:
@@ -447,22 +447,32 @@ x[1..5, 2]   // [10, 30, 50]      — every other element
 Because slices are inclusive and 1-based, `[3..1, -1]` yields exactly three elements: the 3rd,
 2nd, and 1st — in that order.
 
-### Numeric Ranges
+### Numeric Ranges with `steps`
 
-`upto(n)` generates a 1-based range from 1 to n inclusive. For ranges that do not start at 1,
-use `from(a, b)` which is also inclusive on both ends:
-
-```
-upto(5)     // 1, 2, 3, 4, 5
-from(3, 7)  // 3, 4, 5, 6, 7
-```
-
-Both are usable in `for` loops and comprehensions:
+`steps(start, end)` generates a 1-based inclusive range from `start` to `end` in increments of 1.
+An optional third argument sets the step size. All arguments are inclusive.
 
 ```
-for i in from(5, 10) do { print(i) }
-mid := @[x for x in from(3, 7)]
+steps(1, 5)        // 1, 2, 3, 4, 5
+steps(3, 7)        // 3, 4, 5, 6, 7
+steps(1, 10, 2)    // 1, 3, 5, 7, 9     — every other step
+steps(10, 1, -1)   // 10, 9, 8, 7, 6, 5, 4, 3, 2, 1  — count down
+steps(0, 100, 25)  // 0, 25, 50, 75, 100
 ```
+
+`steps` is usable in `for` loops, comprehensions, and anywhere a sequence is expected:
+
+```
+for i in steps(1, 10) do { print(i) }
+for i in steps(5, 10) do { print(i) }
+for i in steps(10, 1, -1) do { print("countdown: ${i}") }
+
+mid    := @[x for x in steps(3, 7)]
+evens  := @[x for x in steps(2, 20, 2)]
+```
+
+The step argument follows the same inclusive, 1-based contract as the rest of the language. A
+negative step counts downward; the range is still valid as long as `start` is greater than `end`.
 
 ---
 
@@ -540,8 +550,16 @@ match find_target(pos) {
 ### `for` over a range
 
 ```
-for i in upto(10) do {
+for i in steps(1, 10) do {
   print("Step ${i}")
+}
+```
+
+### `for` over a range with step
+
+```
+for i in steps(1, 10, 2) do {
+  print("Odd step ${i}")
 }
 ```
 
@@ -814,8 +832,8 @@ These are provided by the engine runtime environment:
 
 | Name | Description |
 |---|---|
-| `upto(n)` | 1-based range from 1 to n inclusive |
-| `from(a, b)` | Inclusive range from a to b (both 1-based) |
+| `steps(start, end)` | Inclusive range from `start` to `end`, step 1 |
+| `steps(start, end, step)` | Inclusive range from `start` to `end` with given step size. Negative step counts down. |
 | `print(x)` | Output to engine console |
 | `len(col)` | Length of a list, dict, or set |
 | `keys(d)` | Keys of a dict as a list |
@@ -863,6 +881,8 @@ Homun compiles to idiomatic Rust. The naming conventions of Homun (`snake_case` 
 | `a, b := b, a` | `let (a, b) = (b, a);` |
 | `_, b := expr` | `let (_, b) = expr;` |
 | `load_ron(p) as T` | `ron::from_str::<T>(...)` with compile-time schema validation |
+| `steps(s, e)` | iterator from s to e inclusive, step 1 |
+| `steps(s, e, k)` | iterator from s to e inclusive, step k |
 | 1-based slice `[i..j]` | index arithmetic with bounds check |
 | Variable `snake_case` | Rust `snake_case` — no mangling |
 | Type `PascalCase` | Rust `PascalCase` — no mangling |
@@ -925,9 +945,14 @@ while (alive and enemies > 0) do {
   attack_nearest()
 }
 
-// Ranges
-upto(5)       // 1, 2, 3, 4, 5
-from(3, 7)    // 3, 4, 5, 6, 7
+// Ranges — steps(start, end) or steps(start, end, step)
+steps(1, 5)         // 1, 2, 3, 4, 5
+steps(3, 7)         // 3, 4, 5, 6, 7
+steps(1, 10, 2)     // 1, 3, 5, 7, 9
+steps(10, 1, -1)    // 10, 9, 8 ... 1
+
+for i in steps(1, 10) do { print(i) }
+for i in steps(10, 1, -1) do { print("T-minus ${i}") }
 
 // Collections (all use @ prefix)
 items  := @[1, 2, 3]
