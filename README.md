@@ -6,7 +6,7 @@ Homun gives game designers a lighter syntax for gameplay scripts without writing
 
 Homun is not a Hindley-Milner language. It is a template-instantiation language.
 Homun uses implicit template-style generics with monomorphization that compiler fill `<T, U>` at first pass.
-
+Homun compile text to text, not rust AST, not binary.
 
 ---
 
@@ -130,27 +130,21 @@ No bare `=` exists. `:=` binds, `==` compares. No ambiguity.
 
 ---
 
-## Type Inference
+## Type Handling & Rust Delegation
 
-Strongly typed — every value has a known type at compile time. No `<T>` in syntax — but `@`
-collections are implicitly generic. `@[]` is `@<T>[]`, `@{}` is `@<K,V>{}`, `@()` is `@<T>()`.
-The `<>` is always hidden; types are inferred from contents or first use. In type annotations,
-the generic parameters appear as comma-separated types inside the brackets: `@[int]`, `@{str, int}`,
-`@(bool)`. Dict annotations use `,` (not `:`) because these are generic parameters, not key-value
-pairs. Unused declarations are compile errors.
+Homun is a **template-instantiation language**, not a Hindley-Milner or traditional type-inference language. Its core job is to **compile into Rust**, and Rust handles `<T, U>` generics and monomorphization.
 
 ```
-items := @[1, 2, 3]        // int list — inferred from contents
-empty := @[]                // type unknown until first use
-empty := empty + @["hi"]    // now compiler knows: str list
+// Homun source code
+apply := (f, x) -> { f(x) }
 
-unused := @[]               // COMPILE ERROR — never used
-
-// Context flows from usage
-process := (items) -> _ { print(items[0] + 1) }   // items[0] + 1 → int arithmetic
-buffer := @[]
-process(buffer)             // compiler infers buffer is @[int] from process body
+// Compiled to Rust code text
+fn apply<T, U>(f: impl Fn(T) -> U, x: T) -> U {
+    f(x)
+}
 ```
+
+> 💡 Note: Homun itself does **not** perform high-level type inference. It simply transpiles Homun programs into Rust, and **all generic `<T, U>` resolution and monomorphization are handled by Rust**.
 
 ---
 
