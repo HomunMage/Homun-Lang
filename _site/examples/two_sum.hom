@@ -1,0 +1,18 @@
+// ─── examples/two_sum.hom ───────────────────────────────────────
+// Demonstrates: nested for, break => value, comparison
+use std
+
+two_sum := (nums: @[int], target: int) -> @[int] {
+  for i in range(len(nums)) do {
+    for j in range(i + 1, len(nums)) do {
+      if (nums[i] + nums[j] == target) do { break => @[i, j] }
+    }
+  }
+  @[]
+}
+
+main := () -> _ {
+  nums := @[2, 7, 11, 15]
+  result := two_sum(nums, 9)
+  print("Two Sum: {:?}", result)
+}

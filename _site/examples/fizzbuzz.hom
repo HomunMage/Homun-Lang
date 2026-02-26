@@ -1,5 +1,6 @@
 // ─── examples/fizzbuzz.hom ──────────────────────────────────────
 // Demonstrates: structs, enums, match, range, string interpolation
+use std
 
 Direction := enum { North, South, East, West }
 
@@ -21,4 +22,11 @@ fizz_buzz := (n: int) -> @[str] {
 
 greet := (p: Player) -> str {
   "Hello, ${p.name}! HP: ${p.hp}"
+}
+
+main := () -> _ {
+  result := fizz_buzz(16)
+  print("{:?}", result)
+  p := Player { name: "Aria", hp: 100, speed: 1.5 }
+  print(greet(p))
 }

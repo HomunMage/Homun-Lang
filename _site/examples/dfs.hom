@@ -1,0 +1,24 @@
+// ─── examples/dfs.hom ───────────────────────────────────────────
+// Demonstrates: recursion, list of lists, membership check (in)
+
+dfs := (graph: @[@[int]], node: int, visited: @[int]) -> @[int] {
+  if (node in visited) do { break => visited }
+  visited := visited + @[node]
+  for neighbor in graph[node] do {
+    visited := dfs(graph, neighbor, visited)
+  }
+  visited
+}
+
+main := () -> _ {
+  // adjacency list: node i -> list of neighbors
+  graph := @[
+    @[1, 2],
+    @[3],
+    @[4],
+    @[],
+    @[]
+  ]
+  result := dfs(graph, 0, @[])
+  print("DFS traversal: {:?}", result)
+}
