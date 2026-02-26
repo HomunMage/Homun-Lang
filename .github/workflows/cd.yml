@@ -22,15 +22,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build WASM with Docker
+      - name: Download released WASM
         run: |
-          docker buildx build \
-            -f Dockerfile.wasm \
-            --output type=local,dest=./wasm-out .
-
-      - name: Copy WASM to _site
-        run: |
-          cp wasm-out/homunc.wasm _site/
+          wget -q https://github.com/HomunMage/Homun-Lang/releases/latest/download/homunc-wasm.tar.gz
+          tar xzf homunc-wasm.tar.gz -C _site/
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
