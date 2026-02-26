@@ -1,11 +1,10 @@
 FROM rust:latest AS builder
 
-RUN rustup target add wasm32-unknown-unknown
-RUN cargo install wasm-pack
+RUN rustup target add wasm32-wasip1
 
 WORKDIR /app
 COPY . .
-RUN wasm-pack build --target web --no-default-features --features wasm
+RUN cargo build --release --target wasm32-wasip1
 
 FROM scratch AS export
-COPY --from=builder /app/pkg/ /
+COPY --from=builder /app/target/wasm32-wasip1/release/homunc.wasm /
