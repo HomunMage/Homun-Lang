@@ -30,74 +30,28 @@ pub fn analyze_program_with_imports(
     prog: &Program,
     imported_names: &HashSet<String>,
 ) -> Result<(), Vec<SemaError>> {
+    run_analysis(prog, imported_names, false)
+}
+
+/// Like `analyze_program_with_imports` but skips undefined-reference checks.
+/// Used when .rs deps are present (sema can't introspect Rust files).
+pub fn analyze_program_with_imports_skip_undef(
+    prog: &Program,
+    imported_names: &HashSet<String>,
+) -> Result<(), Vec<SemaError>> {
+    run_analysis(prog, imported_names, true)
+}
+
+fn run_analysis(
+    prog: &Program,
+    imported_names: &HashSet<String>,
+    skip_undef: bool,
+) -> Result<(), Vec<SemaError>> {
     // Builtins — always available (provided by builtin.rs preamble).
     let builtins: HashSet<String> = ["print", "str", "int", "float", "bool"]
         .iter()
         .map(|s| s.to_string())
         .collect();
-
-    // `use std` provides these (range, len, filter, map, reduce, etc.).
-    let std_names: HashSet<String> = [
-        "len",
-        "range",
-        "filter",
-        "map",
-        "reduce",
-        "load_ron",
-        "save_ron",
-        "abs",
-        "min",
-        "max",
-        "clamp",
-        "sorted",
-        "reversed",
-        "enumerate",
-        "zip",
-        "flatten",
-        "any",
-        "all",
-        "count",
-        "unique",
-        "index_of",
-        "split",
-        "join",
-        "trim",
-        "trim_start",
-        "trim_end",
-        "starts_with",
-        "ends_with",
-        "replace",
-        "to_upper",
-        "to_lower",
-        "chars",
-        "find",
-        "contains",
-        "repeat",
-        "substr",
-        "strip_prefix",
-        "strip_suffix",
-        "lines",
-        "is_empty",
-        "is_digit",
-        "is_alpha",
-        "is_alnum",
-        "is_upper",
-        "is_lower",
-        "pad_left",
-        "pad_right",
-        "std",
-    ]
-    .iter()
-    .map(|s| s.to_string())
-    .collect();
-
-    // Check if program has `use std` or `use ext`.
-    let has_use_std = prog
-        .iter()
-        .any(|s| matches!(s, Stmt::Use(p) if p.len() == 1 && p[0] == "std"));
-    let has_use_ext = prog
-        .iter()
-        .any(|s| matches!(s, Stmt::Use(p) if p.len() == 1 && p[0] == "ext"));
 
     let top_names: HashSet<String> = prog
         .iter()
@@ -109,14 +63,9 @@ pub fn analyze_program_with_imports(
 
     let mut env0: HashSet<String> = builtins.union(&top_names).cloned().collect();
     env0 = env0.union(imported_names).cloned().collect();
-    if has_use_std {
-        env0 = env0.union(&std_names).cloned().collect();
-    }
 
     let mut errs = Vec::new();
-    // When `use ext` is present, skip undefined-reference checks
-    // because ext provides many functions sema can't introspect.
-    if !has_use_ext {
+    if !skip_undef {
         errs.extend(check_stmts(&env0, prog));
     }
     errs.extend(check_casing_all(prog));

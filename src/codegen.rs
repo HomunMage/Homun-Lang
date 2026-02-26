@@ -1,6 +1,6 @@
 /// Code generator: walks the Homun AST and emits Rust source text.
 use crate::ast::*;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 type Indent = usize;
 type Scope = HashSet<Name>;
@@ -12,12 +12,13 @@ fn ind(n: Indent) -> String {
 // ─── Entry point ─────────────────────────────────────────────
 
 pub fn codegen_program(prog: &Program) -> String {
-    codegen_program_with_resolved(prog, &HashSet::new())
+    codegen_program_with_resolved(prog, &HashSet::new(), &HashMap::new())
 }
 
 pub fn codegen_program_with_resolved(
     prog: &Program,
     resolved_hom_files: &HashSet<String>,
+    resolved_rs_content: &HashMap<String, String>,
 ) -> String {
     prog.iter()
         .filter_map(|s| {
@@ -27,19 +28,20 @@ pub fn codegen_program_with_resolved(
                     return None;
                 }
             }
-            Some(codegen_top_level(0, s))
+            Some(codegen_top_level(0, s, resolved_rs_content))
         })
         .collect::<Vec<_>>()
         .join("\n")
 }
 
-fn codegen_top_level(i: Indent, stmt: &Stmt) -> String {
+fn codegen_top_level(i: Indent, stmt: &Stmt, rs_content: &HashMap<String, String>) -> String {
     match stmt {
-        Stmt::Use(path) if path.len() == 1 && path[0] == "std" => {
-            "include!(\"std.rs\");".to_string()
-        }
-        Stmt::Use(path) if path.len() == 1 && path[0] == "ext" => {
-            "include!(\"ext.rs\");".to_string()
+        Stmt::Use(path) if path.len() == 1 => {
+            if let Some(content) = rs_content.get(&path[0]) {
+                format!("// ── use {} ──\n{}", path[0], content)
+            } else {
+                format!("use {};", path.join("::"))
+            }
         }
         Stmt::Use(path) => {
             format!("use {};", path.join("::"))
@@ -203,12 +205,6 @@ fn cg_stmt(i: Indent, scope: &Scope, stmt: &Stmt) -> (String, Scope) {
                 s.insert(name.clone());
                 (format!("{}let mut {} = {};", ind(i), name, rhs), s)
             }
-        }
-        Stmt::Use(path) if path.len() == 1 && path[0] == "std" => {
-            (format!("{}include!(\"std.rs\");", ind(i)), scope.clone())
-        }
-        Stmt::Use(path) if path.len() == 1 && path[0] == "ext" => {
-            (format!("{}include!(\"ext.rs\");", ind(i)), scope.clone())
         }
         Stmt::Use(path) => (format!("{}use {};", ind(i), path.join("::")), scope.clone()),
         Stmt::StructDef(name, fields) => {

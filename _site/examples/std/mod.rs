@@ -53,6 +53,6 @@ macro_rules! reduce {
 
 // ── Sub-libraries ───────────────────────────────────────────
 
-include!("std_str.rs");
-include!("std_math.rs");
-include!("std_collection.rs");
+include!("str.rs");
+include!("math.rs");
+include!("collection.rs");
