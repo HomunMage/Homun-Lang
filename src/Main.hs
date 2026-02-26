@@ -33,10 +33,11 @@ main = do
   args <- getArgs
   case args of
     ["--help"] -> printHelp >> exitSuccess
+    []         -> compileFromStdin
     [src]      -> compileToStdout src
     [src, "-o", out] -> compileToFile src out
     _          -> do
-      hPutStrLn stderr "Usage: homunc <input.hom> [-o output.rs]"
+      hPutStrLn stderr "Usage: homunc [input.hom] [-o output.rs]"
       exitFailure
 
 printHelp :: IO ()
@@ -91,6 +92,13 @@ compile filename source = do
 mapErr :: String -> Either String a -> Either String a
 mapErr prefix (Left e)  = Left (prefix ++ ": " ++ e)
 mapErr _ (Right a)       = Right a
+
+compileFromStdin :: IO ()
+compileFromStdin = do
+  src <- getContents
+  case compile "<stdin>" src of
+    Left err  -> hPutStrLn stderr err >> exitFailure
+    Right out -> putStr out
 
 compileToStdout :: FilePath -> IO ()
 compileToStdout path = do

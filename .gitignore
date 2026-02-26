@@ -9,3 +9,5 @@ Cargo.lock
 
 # Temp
 .tmp/
+_site/
+*.wasm
