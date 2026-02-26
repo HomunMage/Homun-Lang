@@ -1,0 +1,8 @@
+FROM ghcr.io/tweag/ghc-wasm:latest AS builder
+
+WORKDIR /app
+COPY src/*.hs .
+RUN wasm32-wasi-ghc -O2 -o homunc.wasm Main.hs Lexer.hs Parser.hs AST.hs Sema.hs Codegen.hs
+
+FROM scratch AS export
+COPY --from=builder /app/homunc.wasm /
