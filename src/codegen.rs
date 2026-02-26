@@ -12,8 +12,23 @@ fn ind(n: Indent) -> String {
 // ─── Entry point ─────────────────────────────────────────────
 
 pub fn codegen_program(prog: &Program) -> String {
+    codegen_program_with_resolved(prog, &HashSet::new())
+}
+
+pub fn codegen_program_with_resolved(
+    prog: &Program,
+    resolved_hom_files: &HashSet<String>,
+) -> String {
     prog.iter()
-        .map(|s| codegen_top_level(0, s))
+        .filter_map(|s| {
+            // Skip use statements for .hom files that were resolved and inlined.
+            if let Stmt::Use(path) = s {
+                if path.len() == 1 && resolved_hom_files.contains(&path[0]) {
+                    return None;
+                }
+            }
+            Some(codegen_top_level(0, s))
+        })
         .collect::<Vec<_>>()
         .join("\n")
 }

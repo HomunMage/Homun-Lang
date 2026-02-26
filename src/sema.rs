@@ -29,6 +29,13 @@ impl fmt::Display for SemaError {
 }
 
 pub fn analyze_program(prog: &Program) -> Result<(), Vec<SemaError>> {
+    analyze_program_with_imports(prog, &HashSet::new())
+}
+
+pub fn analyze_program_with_imports(
+    prog: &Program,
+    imported_names: &HashSet<String>,
+) -> Result<(), Vec<SemaError>> {
     let builtins: HashSet<String> = [
         "print", "len", "range", "str", "int", "float", "bool", "filter", "map", "reduce",
         "load_ron", "save_ron", "clamp", "update", "idle", "attack", "die", "warn", "recover",
@@ -49,7 +56,13 @@ pub fn analyze_program(prog: &Program) -> Result<(), Vec<SemaError>> {
         })
         .collect();
 
-    let env0: HashSet<String> = builtins.union(&top_names).cloned().collect();
+    let env0: HashSet<String> = builtins
+        .union(&top_names)
+        .cloned()
+        .collect::<HashSet<_>>()
+        .union(imported_names)
+        .cloned()
+        .collect();
 
     let mut errs = Vec::new();
     errs.extend(check_stmts(&env0, prog));

@@ -17,11 +17,13 @@ mod codegen;
 #[allow(dead_code)]
 mod lexer;
 mod parser;
+mod resolver;
 mod sema;
 
 use std::env;
 use std::fs;
 use std::io::{self, Read};
+use std::path::Path;
 use std::process;
 
 fn main() {
@@ -72,22 +74,30 @@ fn print_help() {
     println!("  * RON load/save");
 }
 
-fn compile(_filename: &str, source: &str) -> Result<String, String> {
-    // 1. Lex
+/// Compile source text directly (used for stdin / WASM — no file resolution).
+fn compile_source(source: &str) -> Result<String, String> {
     let tokens = lexer::lex(source).map_err(|e| format!("Lex error: {}", e))?;
-
-    // 2. Parse
     let ast = parser::parse(tokens).map_err(|e| format!("Parse error: {}", e))?;
-
-    // 3. Semantic analysis
     sema::analyze_program(&ast).map_err(|errs| {
         let msgs: Vec<String> = errs.iter().map(|e| e.to_string()).collect();
         format!("Semantic errors:\n{}", msgs.join("\n"))
     })?;
-
-    // 4. Code generation
     let rust_src = format!("{}\n{}", preamble(), codegen::codegen_program(&ast));
     Ok(rust_src)
+}
+
+/// Compile a .hom file, resolving multi-file `use` imports recursively.
+fn compile_file(path: &Path) -> Result<String, String> {
+    let resolved = resolver::resolve(path)?;
+    let mut output = String::from(preamble());
+    output.push('\n');
+    for (i, file) in resolved.files.iter().enumerate() {
+        output.push_str(&file.rust_code);
+        if i + 1 < resolved.files.len() {
+            output.push('\n');
+        }
+    }
+    Ok(output)
 }
 
 fn compile_from_stdin() {
@@ -95,7 +105,7 @@ fn compile_from_stdin() {
     io::stdin()
         .read_to_string(&mut src)
         .expect("Failed to read stdin");
-    match compile("<stdin>", &src) {
+    match compile_source(&src) {
         Ok(out) => print!("{}", out),
         Err(e) => {
             eprintln!("{}", e);
@@ -105,11 +115,7 @@ fn compile_from_stdin() {
 }
 
 fn compile_to_stdout(path: &str) {
-    let src = fs::read_to_string(path).unwrap_or_else(|e| {
-        eprintln!("Cannot read {}: {}", path, e);
-        process::exit(1);
-    });
-    match compile(path, &src) {
+    match compile_file(Path::new(path)) {
         Ok(out) => print!("{}", out),
         Err(e) => {
             eprintln!("{}", e);
@@ -119,11 +125,7 @@ fn compile_to_stdout(path: &str) {
 }
 
 fn compile_to_file(src: &str, out: &str) {
-    let source = fs::read_to_string(src).unwrap_or_else(|e| {
-        eprintln!("Cannot read {}: {}", src, e);
-        process::exit(1);
-    });
-    match compile(src, &source) {
+    match compile_file(Path::new(src)) {
         Ok(code) => {
             fs::write(out, &code).unwrap_or_else(|e| {
                 eprintln!("Cannot write {}: {}", out, e);
