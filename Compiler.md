@@ -134,7 +134,7 @@ The compiler always prepends `runtime/builtin.rs` to every output file via `incl
 | `str_of(x)` | Convert anything Display to String |
 | `dict![]`, `set![]`, `slice![]` | Collection construction macros |
 
-The `std` library (`examples/std/`) provides additional helpers (range, len, filter, map, reduce, string/math/collection utilities) and is included via `use std` in user code.
+The `std` library (`runtime/std/`) is also embedded in the compiler binary via `include_str!()` and inlined when user code writes `use std`. It provides additional helpers (range, len, filter, map, reduce, string/math/collection utilities). Users do not need a `std/` folder on disk — the resolver checks embedded libraries automatically.
 
 ---
 
@@ -198,7 +198,12 @@ Homun-Lang/
 ├── Dockerfile           — cross-compilation (linux x86_64, aarch64, windows)
 ├── Dockerfile.wasm      — WASM build (wasm32-wasi)
 ├── runtime/
-│   └── builtin.rs       — runtime helpers (embedded in compiler output)
+│   ├── builtin.rs       — runtime helpers (embedded in compiler output)
+│   └── std/             — standard library (embedded in compiler binary)
+│       ├── mod.rs
+│       ├── str.rs
+│       ├── math.rs
+│       └── collection.rs
 ├── src/
 │   ├── main.rs          — CLI entry point, preamble, stdin/file compilation
 │   ├── lexer.rs         — tokeniser
@@ -211,11 +216,6 @@ Homun-Lang/
     ├── index.html       — WASM playground
     └── examples/
         ├── *.hom        — example Homun programs
-        ├── std/         — standard library (.rs)
-        │   ├── mod.rs
-        │   ├── str.rs
-        │   ├── math.rs
-        │   └── collection.rs
         └── ext/         — extended library (.rs)
             ├── mod.rs
             ├── str.rs

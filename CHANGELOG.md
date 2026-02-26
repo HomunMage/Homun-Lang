@@ -8,6 +8,13 @@ Branches: `history` (spec drafts), `haskell` (Haskell compiler), `rust` (Rust re
 
 ## Rust Compiler Era (v0.30+)
 
+### v0.34 — Embedded Standard Library
+
+- Moved `std` library from `_site/examples/std/` to `runtime/std/` — now fully embedded in compiler binary via `include_str!()`, no `std/` folder needed on disk
+- Resolver checks embedded runtime libraries when no filesystem match found — `use std` works without any files on disk
+- WASM playground: removed std from JS lib loading (handled natively by embedded runtime), keeps ext only
+- Added `.hooks/pre-commit` with `cargo fmt --check`
+
 ### v0.33 — Unified Namespace Resolution
 
 - Unified `use` resolution: 4-candidate search (`foo/mod.hom`, `foo.hom`, `foo/mod.rs`, `foo.rs`) with strict uniqueness rule (ambiguity = compile error)
@@ -19,7 +26,6 @@ Branches: `history` (spec drafts), `haskell` (Haskell compiler), `rust` (Rust re
 - Added `VERSION` build arg to Dockerfiles and release workflow for CI builds
 - Reorganized `_site/examples/` into folder namespaces: `std/mod.rs` + sub-files, `ext/mod.rs` + sub-files
 - Removed `_site/builtin.rs` and `_site/std.rs` (no longer needed)
-- WASM playground loads library `.rs` files from `examples/std/` and `examples/ext/` in JS and inlines after compilation
 - Updated `Compiler.md` and `README.md` with new import system docs
 
 ### v0.32 — Extended Library & WASM

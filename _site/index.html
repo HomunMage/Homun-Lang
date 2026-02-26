@@ -98,10 +98,10 @@ async function loadExamples() {
   }));
 }
 
-// ── Runtime libraries (loaded from _site/examples/std/ and ext/) ──
-// The compiler in WASM/stdin mode emits `use std;` / `use ext;` as pass-through.
-// The playground inlines the actual .rs content before sending to Rust Playground.
-const LIBS = {};  // { "std": "expanded .rs content", "ext": "..." }
+// ── Runtime libraries (ext only — std is embedded in WASM compiler) ──
+// `use std` is handled natively by the compiler (embedded in binary).
+// `use ext` needs JS-side inlining since ext is a user-provided dependency.
+const LIBS = {};  // { "ext": "expanded .rs content" }
 
 async function loadLib(name, subFiles) {
   try {
@@ -117,10 +117,7 @@ async function loadLib(name, subFiles) {
 }
 
 async function loadLibs() {
-  await Promise.all([
-    loadLib('std', ['str.rs', 'math.rs', 'collection.rs']),
-    loadLib('ext', ['str.rs', 'math.rs', 'collection.rs', 'dict.rs', 'stack.rs', 'deque.rs', 'io.rs']),
-  ]);
+  await loadLib('ext', ['str.rs', 'math.rs', 'collection.rs', 'dict.rs', 'stack.rs', 'deque.rs', 'io.rs']);
 }
 
 // Replace `use <name>;` with inlined .rs content in compiled Rust output.

@@ -14,7 +14,7 @@
 /// .rs deps are fully expanded: any `include!("...")` within them is
 /// recursively resolved and inlined, so the final output is self-contained.
 use crate::ast::*;
-use crate::{codegen, lexer, parser, sema};
+use crate::{codegen, embedded_rs, lexer, parser, sema};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
@@ -76,37 +76,25 @@ impl Resolver {
         // 1. foo/mod.hom
         let folder_mod_hom = dir.join(name).join("mod.hom");
         if folder_mod_hom.exists() {
-            candidates.push((
-                format!("{}/mod.hom", name),
-                Found::Hom(folder_mod_hom),
-            ));
+            candidates.push((format!("{}/mod.hom", name), Found::Hom(folder_mod_hom)));
         }
 
         // 2. foo.hom
         let flat_hom = dir.join(format!("{}.hom", name));
         if flat_hom.exists() {
-            candidates.push((
-                format!("{}.hom", name),
-                Found::Hom(flat_hom),
-            ));
+            candidates.push((format!("{}.hom", name), Found::Hom(flat_hom)));
         }
 
         // 3. foo/mod.rs
         let folder_mod_rs = dir.join(name).join("mod.rs");
         if folder_mod_rs.exists() {
-            candidates.push((
-                format!("{}/mod.rs", name),
-                Found::Rs(folder_mod_rs),
-            ));
+            candidates.push((format!("{}/mod.rs", name), Found::Rs(folder_mod_rs)));
         }
 
         // 4. foo.rs
         let flat_rs = dir.join(format!("{}.rs", name));
         if flat_rs.exists() {
-            candidates.push((
-                format!("{}.rs", name),
-                Found::Rs(flat_rs),
-            ));
+            candidates.push((format!("{}.rs", name), Found::Rs(flat_rs)));
         }
 
         match candidates.len() {
@@ -176,12 +164,16 @@ impl Resolver {
                                 }
                                 Some(Found::Rs(rs_path)) => {
                                     let content = expand_rs_file(&rs_path)?;
-                                    self.resolved_rs_content
-                                        .insert(dep_name.clone(), content);
+                                    self.resolved_rs_content.insert(dep_name.clone(), content);
                                     has_rs_dep = true;
                                 }
                                 None => {
-                                    // Not a local dep — will be emitted as Rust `use`.
+                                    // Check embedded runtime libraries before falling through.
+                                    if let Some(content) = embedded_rs(dep_name) {
+                                        self.resolved_rs_content.insert(dep_name.clone(), content);
+                                        has_rs_dep = true;
+                                    }
+                                    // Otherwise: not a local dep — will be emitted as Rust `use`.
                                 }
                             }
                         }
@@ -191,15 +183,16 @@ impl Resolver {
                 // Semantic analysis with imported names visible.
                 // If there are .rs deps, skip undefined checks (can't introspect .rs).
                 if has_rs_dep {
-                    sema::analyze_program_with_imports_skip_undef(&ast, &imported_names)
-                        .map_err(|errs| {
+                    sema::analyze_program_with_imports_skip_undef(&ast, &imported_names).map_err(
+                        |errs| {
                             let msgs: Vec<String> = errs.iter().map(|e| e.to_string()).collect();
                             format!(
                                 "{}: Semantic errors:\n{}",
                                 canonical.display(),
                                 msgs.join("\n")
                             )
-                        })?;
+                        },
+                    )?;
                 } else {
                     sema::analyze_program_with_imports(&ast, &imported_names).map_err(|errs| {
                         let msgs: Vec<String> = errs.iter().map(|e| e.to_string()).collect();

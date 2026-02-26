@@ -2,7 +2,7 @@
 
 Homun is a scripting layer for a Rust-based ECS game engine. Every valid Homun program transpiles 1-to-1 to Rust. 
 For performance-critical code and architecture, you write Rust directly. 
-Homun gives game designers a lighter syntax for gameplay scripts without writing raw Rust.
+Inspired by Svelte, Homun gives game designers a lighter syntax for gameplay scripts without writing raw Rust. 
 Homun is not a language. It is a template-instantiation embed script. Thus, Hindley-Milner is handle by rust.
 
 ---

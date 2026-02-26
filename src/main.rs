@@ -79,22 +79,51 @@ fn print_help() {
 }
 
 /// Compile source text directly (used for stdin / WASM — no file resolution).
-/// `use` statements pass through as Rust `use` — the caller (e.g. WASM
-/// playground JS) is responsible for providing library content.
+/// `use std` is handled via embedded runtime; other `use` statements pass through.
 fn compile_source(source: &str) -> Result<String, String> {
+    use std::collections::HashMap;
     let tokens = lexer::lex(source).map_err(|e| format!("Lex error: {}", e))?;
     let ast = parser::parse(tokens).map_err(|e| format!("Parse error: {}", e))?;
     sema::analyze_program_with_imports_skip_undef(&ast, &Default::default()).map_err(|errs| {
         let msgs: Vec<String> = errs.iter().map(|e| e.to_string()).collect();
         format!("Semantic errors:\n{}", msgs.join("\n"))
     })?;
-    let code = codegen::codegen_program_with_resolved(
-        &ast,
-        &Default::default(),
-        &Default::default(),
-    );
+    // Resolve embedded libraries (std) for use statements.
+    let mut rs_content: HashMap<String, String> = HashMap::new();
+    for stmt in &ast {
+        if let ast::Stmt::Use(path) = stmt {
+            if path.len() == 1 {
+                if let Some(content) = embedded_rs(&path[0]) {
+                    rs_content.insert(path[0].clone(), content);
+                }
+            }
+        }
+    }
+    let code = codegen::codegen_program_with_resolved(&ast, &Default::default(), &rs_content);
     let rust_src = format!("{}{}", preamble(), code);
     Ok(rust_src)
+}
+
+/// Return embedded .rs content for official runtime libraries.
+/// Files are embedded from `runtime/` at compiler build time.
+pub fn embedded_rs(name: &str) -> Option<String> {
+    match name {
+        "std" => {
+            let mod_rs: String = include_str!("../runtime/std/mod.rs")
+                .lines()
+                .filter(|l| !l.trim().starts_with("include!("))
+                .collect::<Vec<_>>()
+                .join("\n");
+            Some(format!(
+                "{}\n{}\n{}\n{}",
+                mod_rs,
+                include_str!("../runtime/std/str.rs"),
+                include_str!("../runtime/std/math.rs"),
+                include_str!("../runtime/std/collection.rs"),
+            ))
+        }
+        _ => None,
+    }
 }
 
 /// Compile a .hom file, resolving multi-file `use` imports recursively.
