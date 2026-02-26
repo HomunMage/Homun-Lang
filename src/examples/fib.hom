@@ -1,5 +1,6 @@
 // ─── examples/fib.hom ───────────────────────────────────────────
 // Demonstrates: recursion, if/else, break => value
+use std
 
 fib := (n: int) -> int {
   if (n <= 1) do { break => n }

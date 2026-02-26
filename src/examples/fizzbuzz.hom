@@ -1,5 +1,6 @@
 // ─── examples/fizzbuzz.hom ──────────────────────────────────────
 // Demonstrates: structs, enums, match, range, string interpolation
+use std
 
 Direction := enum { North, South, East, West }
 

@@ -71,6 +71,9 @@ data Expr
   | EFor    Name Expr [Stmt] (Maybe Expr)            -- for x in iter do { ... }
   | EWhile  Expr [Stmt] (Maybe Expr)                 -- while cond do { ... }
 
+  -- Bare block { stmts; expr }
+  | EBlock  [Stmt] Expr
+
   -- Break / continue
   | EBreak  (Maybe Expr)
   | EContinue

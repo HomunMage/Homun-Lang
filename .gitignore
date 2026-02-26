@@ -1,0 +1,11 @@
+# Rust build artifacts
+target/
+**/*.rs.bk
+Cargo.lock
+
+# Generated .rs files (compiled from .hom)
+
+!src/examples/std.rs
+
+# Temp
+.tmp/

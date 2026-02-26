@@ -56,6 +56,7 @@ analyzeProgram prog =
         [ "print", "len", "range", "str", "int", "float", "bool"
         , "filter", "map", "reduce", "load_ron", "save_ron"
         , "clamp", "update", "idle", "attack", "die", "warn", "recover"
+        , "std"
         ]
       topNames = Set.fromList [ n | SBind n _ <- prog ]
       env0     = Set.union builtins topNames
@@ -63,7 +64,7 @@ analyzeProgram prog =
                  ++ checkCasingAll prog
                  ++ checkMutualRec prog
   in if null errs
-       then Right (map (markRecursion topNames) prog)
+       then Right prog
        else Left errs
 
 -- ─────────────────────────────────────────
@@ -140,6 +141,9 @@ checkExpr env e = case e of
     let envFinal = foldl stmtBound env stmts
     in checkExpr env c ++ checkStmts env stmts
        ++ maybe [] (checkExpr envFinal) fe
+  EBlock stmts fe    ->
+    let envFinal = foldl stmtBound env stmts
+    in checkStmts env stmts ++ checkExpr envFinal fe
   EBreak me          -> maybe [] (checkExpr env) me
   ELambda params _ _ stmts fe ->
     let env'     = foldr (\(Param n _) s -> Set.insert n s) env params
@@ -199,6 +203,7 @@ collectCalls (EMatch sc arms)       = collectCalls sc ++ concatMap (\(MatchArm _
 collectCalls (EFor _ it ss fe)      = collectCalls it ++ concatMap collectStmtCalls ss ++ maybe [] collectCalls fe
 collectCalls (EWhile c ss fe)       = collectCalls c ++ concatMap collectStmtCalls ss ++ maybe [] collectCalls fe
 collectCalls (ELambda _ _ _ ss fe)  = concatMap collectStmtCalls ss ++ collectCalls fe
+collectCalls (EBlock ss fe)         = concatMap collectStmtCalls ss ++ collectCalls fe
 collectCalls _                      = []
 
 collectStmtCalls :: Stmt -> [Name]
@@ -213,28 +218,3 @@ findMutual graph n =
       mutuals  = filter (\c -> n `elem` Map.findWithDefault [] c graph) callees
   in map (MutualRec n) mutuals
 
--- ─────────────────────────────────────────
--- 4. Recursion marking
--- ─────────────────────────────────────────
-
--- | After analysis, annotate recursive lambdas so codegen can emit the right Rust
-markRecursion :: Set.Set Name -> Stmt -> Stmt
-markRecursion topNames (SBind n (ELambda params ret void stmts finalExpr))
-  | isRecursiveExpr n finalExpr || any (isRecursiveStmt n) stmts =
-      SBind n (ELambda params ret void stmts finalExpr)  -- In real impl, wrap with Rc<RefCell<_>>
-  | otherwise =
-      SBind n (ELambda params ret void stmts finalExpr)
-markRecursion _ s = s
-
-isRecursiveExpr :: Name -> Expr -> Bool
-isRecursiveExpr n (ECall (EVar m) _) = n == m
-isRecursiveExpr n (EBinOp _ a b)     = isRecursiveExpr n a || isRecursiveExpr n b
-isRecursiveExpr n (EIf _ _ te ec)    = isRecursiveExpr n te || maybe False (\(_,e) -> isRecursiveExpr n e) ec
-isRecursiveExpr n (EMatch _ arms)    = any (\(MatchArm _ _ b) -> isRecursiveExpr n b) arms
-isRecursiveExpr n (EFor _ _ ss fe)   = any (isRecursiveStmt n) ss || maybe False (isRecursiveExpr n) fe
-isRecursiveExpr _ _                  = False
-
-isRecursiveStmt :: Name -> Stmt -> Bool
-isRecursiveStmt n (SBind _ e)   = isRecursiveExpr n e
-isRecursiveStmt n (SExprStmt e) = isRecursiveExpr n e
-isRecursiveStmt _ _             = False

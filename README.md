@@ -1,12 +1,9 @@
-# Homun Language Reference
+# Homun Script Reference
 
 Homun is a scripting layer for a Rust-based ECS game engine. Every valid Homun program transpiles 1-to-1 to Rust. 
 For performance-critical code and architecture, you write Rust directly. 
 Homun gives game designers a lighter syntax for gameplay scripts without writing raw Rust.
-
-Homun is not a Hindley-Milner language. It is a template-instantiation language.
-Homun uses implicit template-style generics with monomorphization that compiler fill `<T, U>` at first pass.
-Homun compile text to text, not rust AST, not binary.
+Homun is not a language. It is a template-instantiation embed script. Thus, Hindley-Milner is handle by rust.
 
 ---
 
@@ -413,12 +410,6 @@ Only data structs are RON-compatible. `save_ron` on a behavior struct is a compi
 ---
 
 ## Compiler Behavior
-```
-fib := (n) -> { if (n <= 1) do { n } else { fib(n-1) + fib(n-2) } }
-// after 1st pass:
-fib := rec(n) -> { if (n <= 1) do { n } else { fib(n-1) + fib(n-2) } }
-```
-
 ```
 f := (x) -> { g(x) }  // ❌ compile error, g not exist before f
 g := (y) -> { f(y) }  

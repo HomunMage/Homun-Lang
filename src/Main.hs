@@ -119,6 +119,6 @@ preamble = unlines
   , "#![allow(unused_variables, unused_mut, dead_code, unused_imports, unused_macros)]"
   , "#![allow(non_snake_case)]"
   , ""
-  , "include!(\"std.rs\");"
+  , "include!(\"builtin.rs\");"
   , ""
   ]

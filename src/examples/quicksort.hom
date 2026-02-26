@@ -1,5 +1,6 @@
 // ─── examples/quicksort.hom ─────────────────────────────────────
 // Demonstrates: recursion, pipe, filter, collections, break => value
+use std
 
 quicksort := (arr: @[int]) -> @[int] {
   if (len(arr) <= 1) do { break => arr }

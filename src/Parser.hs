@@ -174,10 +174,10 @@ parseBlockStmts' :: Parser [Stmt]
 parseBlockStmts' = do expect TLBrace; stmts <- parseBlockStmts; expect TRBrace; return stmts
 
 splitBlock :: [Stmt] -> ([Stmt], Expr)
-splitBlock [] = ([], EBool True)
+splitBlock [] = ([], ETuple [])
 splitBlock stmts = case last stmts of
   SExprStmt e -> (init stmts, e)
-  _           -> (stmts, EBool True)
+  _           -> (stmts, ETuple [])
 
 -- ─── Expressions ─────────────────────────────────────────────
 
@@ -593,7 +593,7 @@ parseInlineBlock :: Parser Expr
 parseInlineBlock = do
   stmts <- parseBlockStmts'
   let (ss, fe) = splitBlock stmts
-  return (EFor "__block__" (EList []) ss (Just fe))
+  return (EBlock ss fe)
 
 -- ─── Types ───────────────────────────────────────────────────
 
