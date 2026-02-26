@@ -9,8 +9,11 @@ RUN apt-get update && apt-get install -y \
 
 ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
 
+ARG VERSION=dev
+
 WORKDIR /app
 COPY . .
+ENV HOMUN_VERSION=${VERSION}
 RUN cargo build --release --target ${TARGET}
 
 FROM scratch AS export

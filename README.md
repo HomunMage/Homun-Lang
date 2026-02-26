@@ -73,9 +73,9 @@ fizz_buzz := (n: int) -> @[str] {
 // single-line comment
 /* multi-line comment */
 
-// Imports — only Rust libs exposed to the scripting layer
-use engine::physics::{Vec2, RigidBody}
-use engine::math::*
+// Imports
+use std                                // standard library
+use engine::physics::{Vec2, RigidBody} // Rust pass-through
 
 // Variables — := for all bindings, no let/var/const/mut
 x      := 10
@@ -411,6 +411,57 @@ Only data structs are RON-compatible. `save_ron` on a behavior struct is a compi
 
 ---
 
+## Imports (`use`)
+
+`use foo` resolves to exactly **one** of four candidates (relative to the current file's directory):
+
+| Candidate | Type | What happens |
+|---|---|---|
+| `foo/mod.hom` | Homun folder | Compile `mod.hom` recursively; it can `use` siblings |
+| `foo.hom` | Homun file | Compile and inline |
+| `foo/mod.rs` | Rust folder | Read, expand, and inline |
+| `foo.rs` | Rust file | Read, expand, and inline |
+
+**Rules:**
+- **0 matches** — falls through to Rust `use` (e.g. `use engine::physics`)
+- **1 match** — resolved and inlined into the output
+- **2+ matches** — compile error (ambiguous)
+
+Only one form of `foo` may exist. If both `dog.hom` and `dog.rs` exist, or `dog/mod.hom` and `dog.rs`, the compiler errors.
+
+### Folder namespaces
+
+A folder acts as a namespace when it contains `mod.hom` (or `mod.rs`):
+
+```
+opencv/
+  mod.hom          // entry point — use img
+  img.hom          // exports image functions
+  filter.hom       // exports filter functions
+```
+
+From outside: `use opencv` resolves to `opencv/mod.hom`, which pulls in siblings via normal `use`.
+
+### Standard library
+
+```
+use std    // provides: range, len, filter, map, reduce, split, join, abs, min, max, ...
+use ext    // extended library: io, stack, deque, dict helpers, ...
+```
+
+`std` and `ext` follow the same resolution rule — no special-casing. They resolve to `std/mod.rs` and `ext/mod.rs` in the examples directory.
+
+### Self-contained output
+
+The compiler inlines everything: `runtime/builtin.rs` is embedded in the compiler binary, and all `.rs` dependencies (including nested `include!()` within them) are recursively expanded. The generated `.rs` file compiles with `rustc` standalone — no external files needed.
+
+```bash
+homunc main.hom -o main.rs
+rustc main.rs -o main        # no builtin.rs or std.rs needed
+```
+
+---
+
 ## Compiler Behavior
 
 ```
@@ -422,7 +473,7 @@ b := f("hi")   // ❌ compile error
 g := identity
 c := g("hi")   // success
 
-nums := @[int](1,2,3)    
+nums := @[int](1,2,3)
 empty := @[]              // ❌ compile error, never used
 
 

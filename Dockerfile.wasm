@@ -2,8 +2,11 @@ FROM rust:latest AS builder
 
 RUN rustup target add wasm32-wasip1
 
+ARG VERSION=dev
+
 WORKDIR /app
 COPY . .
+ENV HOMUN_VERSION=${VERSION}
 RUN cargo build --release --target wasm32-wasip1
 
 FROM scratch AS export

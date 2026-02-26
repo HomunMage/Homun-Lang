@@ -22,10 +22,6 @@ impl fmt::Display for SemaError {
     }
 }
 
-pub fn analyze_program(prog: &Program) -> Result<(), Vec<SemaError>> {
-    analyze_program_with_imports(prog, &HashSet::new())
-}
-
 pub fn analyze_program_with_imports(
     prog: &Program,
     imported_names: &HashSet<String>,

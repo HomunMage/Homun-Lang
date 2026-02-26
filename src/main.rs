@@ -29,8 +29,11 @@ use std::process;
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
     match args.as_slice() {
-        [flag] if flag == "--help" => {
+        [flag] if flag == "--help" || flag == "-h" => {
             print_help();
+        }
+        [flag] if flag == "--version" || flag == "-v" => {
+            println!("homunc {}", env!("HOMUN_VERSION"));
         }
         [] => {
             compile_from_stdin();
@@ -49,12 +52,13 @@ fn main() {
 }
 
 fn print_help() {
-    println!("homunc — Homun to Rust compiler");
+    println!("homunc {} — Homun to Rust compiler", env!("HOMUN_VERSION"));
     println!();
     println!("USAGE:");
     println!("  homunc <input.hom>            Compile and print Rust to stdout");
     println!("  homunc <input.hom> -o out.rs  Compile and write to file");
-    println!("  homunc --help                 Show this message");
+    println!("  homunc -v, --version          Show version");
+    println!("  homunc -h, --help             Show this message");
     println!();
     println!("PIPELINE:");
     println!("  .hom source  ->  Lexer  ->  Parser  ->  Sema  ->  Codegen  ->  .rs");
@@ -75,14 +79,21 @@ fn print_help() {
 }
 
 /// Compile source text directly (used for stdin / WASM — no file resolution).
+/// `use` statements pass through as Rust `use` — the caller (e.g. WASM
+/// playground JS) is responsible for providing library content.
 fn compile_source(source: &str) -> Result<String, String> {
     let tokens = lexer::lex(source).map_err(|e| format!("Lex error: {}", e))?;
     let ast = parser::parse(tokens).map_err(|e| format!("Parse error: {}", e))?;
-    sema::analyze_program(&ast).map_err(|errs| {
+    sema::analyze_program_with_imports_skip_undef(&ast, &Default::default()).map_err(|errs| {
         let msgs: Vec<String> = errs.iter().map(|e| e.to_string()).collect();
         format!("Semantic errors:\n{}", msgs.join("\n"))
     })?;
-    let rust_src = format!("{}{}", preamble(), codegen::codegen_program(&ast));
+    let code = codegen::codegen_program_with_resolved(
+        &ast,
+        &Default::default(),
+        &Default::default(),
+    );
+    let rust_src = format!("{}{}", preamble(), code);
     Ok(rust_src)
 }
 

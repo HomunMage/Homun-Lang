@@ -11,10 +11,6 @@ fn ind(n: Indent) -> String {
 
 // ─── Entry point ─────────────────────────────────────────────
 
-pub fn codegen_program(prog: &Program) -> String {
-    codegen_program_with_resolved(prog, &HashSet::new(), &HashMap::new())
-}
-
 pub fn codegen_program_with_resolved(
     prog: &Program,
     resolved_hom_files: &HashSet<String>,

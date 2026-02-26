@@ -10,6 +10,12 @@ A text-to-text transpiler that compiles the **Homun** scripting language into **
 Source (.hom)
     │
     ▼
+┌──────────┐
+│ Resolver │  src/resolver.rs — multi-file dependency resolution (DFS)
+└────┬─────┘    • 4-candidate search (mod.hom, .hom, mod.rs, .rs)
+     │           • cycle detection (three-color algorithm)
+     │           • .rs include!() expansion
+     ▼
 ┌─────────┐
 │  Lexer  │  src/lexer.rs   — tokenises Homun source into Vec<Token>
 └────┬────┘
@@ -23,9 +29,9 @@ Source (.hom)
 ┌──────────┐
 │   Sema   │  src/sema.rs   — semantic analysis:
 └────┬─────┘    • snake_case enforcement
-     │           • recursion detection & marking
-     │ Program   • mutual recursion error
-     ▼           • undefined reference check
+     │           • undefined reference check
+     │ Program   • (skips undef check when .rs deps present)
+     ▼
 ┌──────────┐
 │ Codegen  │  src/codegen.rs — walks AST, emits Rust text
 └────┬─────┘
@@ -43,20 +49,92 @@ Source (.hom)
 cargo build --release
 ```
 
+Version is set via `HOMUN_VERSION` environment variable (defaults to `git describe --tags`). In CI, the release workflow passes `--build-arg VERSION=<tag>` to Docker.
+
 ---
 
 ## Usage
 
 ```bash
 # Compile to stdout
-./target/release/homunc examples/quicksort.hom
+homunc examples/quicksort.hom
 
 # Compile to file
-./target/release/homunc examples/fizzbuzz.hom -o output.rs
+homunc examples/fizzbuzz.hom -o output.rs
+
+# Version / help
+homunc -v
+homunc --help
+
+# Stdin (WASM playground uses this)
+echo 'print("hello")' | homunc
 
 # Then compile the Rust
 rustc output.rs -o program
 ```
+
+---
+
+## Imports (`use`)
+
+`use foo` resolves against **exactly one** of four candidates in the same directory as the source file:
+
+| Priority | Path | Type | Action |
+|---|---|---|---|
+| 1 | `foo/mod.hom` | Homun folder | Compile recursively, inline Rust output |
+| 2 | `foo.hom` | Homun file | Compile and inline |
+| 3 | `foo/mod.rs` | Rust folder | Read, expand `include!()`, inline content |
+| 4 | `foo.rs` | Rust file | Read and inline content |
+
+- **0 matches** → pass through as Rust `use foo;`
+- **1 match** → resolve and inline
+- **2+ matches** → compile error (`Ambiguous import`)
+
+### Uniqueness Rule
+
+Only one form of `foo` may exist. If both `dog.rs` and `dog.hom` exist, or `dog/mod.hom` and `dog.rs`, the compiler emits an ambiguity error.
+
+### Folder Namespaces
+
+`foo/mod.hom` (or `foo/mod.rs`) resolves `use` statements relative to `foo/`:
+
+```
+opencv/
+  mod.hom        // "use img" → resolves opencv/img.hom
+  img.hom
+  filter.hom
+```
+
+### Self-Contained Output
+
+The compiled Rust output contains all dependencies inline — no `include!()` statements remain. For `.rs` dependencies, the resolver recursively expands any `include!("...")` lines before inlining.
+
+### Dependency Resolution
+
+- **Cycle detection** — three-color DFS algorithm; circular `use` chains → compile error
+- **Deduplication** — each file compiled at most once (tracked by canonical path)
+- **Topological order** — leaves compiled first, then files that depend on them
+
+### WASM / Stdin Mode
+
+When compiling from stdin (no filesystem), `use` statements pass through as `use foo;`. The WASM playground handles library inlining in JavaScript by loading `.rs` files from `examples/std/` and `examples/ext/` and replacing `use std;` / `use ext;` in the output.
+
+---
+
+## Runtime (`runtime/builtin.rs`)
+
+The compiler always prepends `runtime/builtin.rs` to every output file via `include_str!()` at compiler build time. This provides:
+
+| Helper | Description |
+|---|---|
+| `homun_slice(v, start, end, step)` | Python-style negative-index slicing |
+| `homun_concat(a, b)` | List concatenation |
+| `homun_in!(val, collection)` | Membership test |
+| `homun_idx(idx)` | Indexing trait |
+| `str_of(x)` | Convert anything Display to String |
+| `dict![]`, `set![]`, `slice![]` | Collection construction macros |
+
+The `std` library (`examples/std/`) provides additional helpers (range, len, filter, map, reduce, string/math/collection utilities) and is included via `use std` in user code.
 
 ---
 
@@ -84,30 +162,12 @@ rustc output.rs -o program
 
 ---
 
-## Runtime Helpers (auto-emitted preamble)
-
-The compiler prepends a small Rust preamble to every output file:
-
-| Helper | Description |
-|---|---|
-| `homun_slice(v, start, end, step)` | Python-style negative-index slicing |
-| `len(c)` | Works on Vec, HashMap, HashSet, String |
-| `range(n)` / `range2(s,e)` / `range3(s,e,step)` | Range iterators |
-| `filter(v, f)` | Functional filter over Vec |
-| `map(v, f)` | Functional map over Vec |
-| `reduce(v, f)` | Functional reduce over Vec |
-| `str_of(x)` | Convert anything Display to String |
-
----
-
 ## Semantic Checks
 
 The `Sema` pass enforces Homun's rules **before** codegen:
 
 1. **snake_case** — all variable and lambda names must be `snake_case`
-2. **Recursion detection** — auto-detects self-recursive lambdas
-3. **Mutual recursion error** — two functions calling each other → compile error
-4. **Undefined references** — references to names not yet defined → compile error
+2. **Undefined references** — references to names not yet defined → compile error (skipped when `.rs` deps are present since sema can't introspect Rust files)
 
 ---
 
@@ -133,73 +193,36 @@ The `Sema` pass enforces Homun's rules **before** codegen:
 ```
 Homun-Lang/
 ├── Cargo.toml
+├── build.rs             — sets HOMUN_VERSION from git tag or env var
 ├── Compiler.md
 ├── Dockerfile           — cross-compilation (linux x86_64, aarch64, windows)
 ├── Dockerfile.wasm      — WASM build (wasm32-wasi)
 ├── runtime/
-│   └── builtin.rs       — runtime helpers (included in compiler output)
-└── src/
-    ├── main.rs          — CLI entry point, pipeline orchestration, Rust preamble
-    ├── lexer.rs         — tokeniser
-    ├── ast.rs           — abstract syntax tree types
-    ├── parser.rs        — recursive-descent parser
-    ├── sema.rs          — semantic analysis
-    └── codegen.rs       — Rust code emitter
+│   └── builtin.rs       — runtime helpers (embedded in compiler output)
+├── src/
+│   ├── main.rs          — CLI entry point, preamble, stdin/file compilation
+│   ├── lexer.rs         — tokeniser
+│   ├── ast.rs           — abstract syntax tree types
+│   ├── parser.rs        — recursive-descent parser
+│   ├── resolver.rs      — multi-file dependency resolution
+│   ├── sema.rs          — semantic analysis
+│   └── codegen.rs       — Rust code emitter
+└── _site/
+    ├── index.html       — WASM playground
+    └── examples/
+        ├── *.hom        — example Homun programs
+        ├── std/         — standard library (.rs)
+        │   ├── mod.rs
+        │   ├── str.rs
+        │   ├── math.rs
+        │   └── collection.rs
+        └── ext/         — extended library (.rs)
+            ├── mod.rs
+            ├── str.rs
+            ├── math.rs
+            ├── collection.rs
+            ├── dict.rs
+            ├── stack.rs
+            ├── deque.rs
+            └── io.rs
 ```
-
----
-
-## TODO: Multi-file `use` (Text Inclusion)
-
-Support `use` for other `.hom` files via textual inclusion (like C `#include`).
-
-### Behavior
-
-```
-// main.hom
-use math        // finds math.hom, compiles it, inlines the Rust output
-use utils       // finds utils.hom, compiles it, inlines the Rust output
-```
-
-- `use foo` → compiler looks for `foo.hom` in the same directory
-- If found: compile `foo.hom` → inline the resulting Rust into the output
-- If not found: fall through to existing behavior (`use foo;` as Rust import)
-- `use std` remains special-cased → `include!("std.rs");`
-
-### Dependency Resolution
-
-The compiler must resolve the dependency graph before compilation:
-
-1. **Circular dependency detection** — `a.hom use b.hom, b.hom use a.hom` → compile error
-2. **Include guard (deduplicate)** — if `a.hom` uses `b.hom` and `b.hom` uses `c.hom`, the output contains only one copy of `c.hom` (like C header guards / `#pragma once`)
-3. **Topological sort** — compile in dependency order (leaves first)
-
-### Algorithm
-
-```
-resolve := (file: str, visited: @(str), emitted: @(str)) -> str {
-  if (file in visited and not file in emitted) do {
-    break => "ERROR: circular dependency on ${file}"
-  }
-  if (file in emitted) do { break => "" }
-  visited := visited + @(file)
-  output := ""
-  for dep in parse_uses(file) do {
-    if (exists("${dep}.hom")) do {
-      output := output + resolve("${dep}.hom", visited, emitted)
-    }
-  }
-  emitted := emitted + @(file)
-  output := output + codegen(file)
-  output
-}
-```
-
-### Changes Required
-
-| Component | Change |
-|---|---|
-| **main.rs** | Add file resolver: check if `foo.hom` exists for each `use foo` |
-| **main.rs** | Implement dependency graph traversal with cycle detection + dedup |
-| **codegen.rs** | `use foo` when `foo.hom` exists → inline compiled output instead of `use foo;` |
-| **sema.rs** | Collect exported names from included files to avoid false "undefined" errors |

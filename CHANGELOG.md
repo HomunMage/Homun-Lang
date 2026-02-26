@@ -8,6 +8,28 @@ Branches: `history` (spec drafts), `haskell` (Haskell compiler), `rust` (Rust re
 
 ## Rust Compiler Era (v0.30+)
 
+### v0.33 — Unified Namespace Resolution
+
+- Unified `use` resolution: 4-candidate search (`foo/mod.hom`, `foo.hom`, `foo/mod.rs`, `foo.rs`) with strict uniqueness rule (ambiguity = compile error)
+- Folder-as-namespace: `foo/mod.hom` or `foo/mod.rs` as entry points, sub-files resolve relative to folder
+- Self-contained output: `.rs` dependencies recursively expanded (all `include!()` resolved and inlined)
+- Removed special-casing of `use std` / `use ext` from codegen and sema — all imports follow the same resolution rule
+- Embedded `runtime/builtin.rs` into compiler binary via `include_str!()` (always prepended to output)
+- Added `build.rs` for git tag versioning (`homunc -v` shows version)
+- Added `VERSION` build arg to Dockerfiles and release workflow for CI builds
+- Reorganized `_site/examples/` into folder namespaces: `std/mod.rs` + sub-files, `ext/mod.rs` + sub-files
+- Removed `_site/builtin.rs` and `_site/std.rs` (no longer needed)
+- WASM playground loads library `.rs` files from `examples/std/` and `examples/ext/` in JS and inlines after compilation
+- Updated `Compiler.md` and `README.md` with new import system docs
+
+### v0.32 — Extended Library & WASM
+
+- Added `ext` (extended library): `ext.rs` with `ext_str.rs`, `ext_math.rs`, `ext_collection.rs`, `ext_dict.rs`, `ext_stack.rs`, `ext_deque.rs`, `ext_io.rs`
+- Added `_site/builtin.rs` and `_site/std.rs` for WASM playground runtime
+- Added `Dockerfile.wasm` for WASM builds
+- Simplified `sema.rs`: removed recursion/mutual-recursion detection, kept snake_case and undefined reference checks
+- Codegen: added `use ext` → `include!("ext.rs")` support
+
 ### v0.31 — Multi-File Import
 
 - Added `resolver.rs`: DFS dependency resolver with three-color cycle detection
