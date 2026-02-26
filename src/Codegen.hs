@@ -156,8 +156,8 @@ codegenStmt i s = case s of
   SBind name expr ->
     case expr of
       ELambda params retTy voidMark stmts finalExpr ->
-        -- inner function / closure
-        let paramStr = codegenParams params
+        -- inner function / closure (use _ for untyped params, not T/U/V)
+        let paramStr = intercalate ", " (map codegenParam params)
             retStr   = maybe "" ((" -> " ++) . codegenType) retTy
             bodyLines = map (codegenStmt (i+1)) stmts
                         ++ [ind (i+1) ++ codegenExpr (i+1) finalExpr]
@@ -203,12 +203,6 @@ codegenExpr i expr = case expr of
   EString s -> codegenString s
   EVar "_"  -> "_"
   EVar "str"    -> "str_of"
-  EVar "len"    -> "len"
-  EVar "range"  -> "range"
-  EVar "filter" -> "filter"
-  EVar "map"    -> "map"
-  EVar "reduce" -> "reduce"
-  EVar "print"  -> "println!"
   EVar n    -> n
 
   EField e field ->
@@ -273,14 +267,10 @@ codegenExpr i expr = case expr of
          OpNot -> "!" ++ s
          OpNeg -> "-" ++ s
 
-  -- Pipe: lhs | filter/map(args)  →  filter/map(&lhs, args)  (pass by reference)
-  EPipe lhs (ECall (EVar "filter") args) ->
-    "filter(&" ++ codegenExpr i lhs ++
+  -- Pipe: lhs | f(args)  →  f!(lhs, args) for builtins, f(lhs, args) otherwise
+  EPipe lhs (ECall (EVar fn) args) | fn `elem` homunMacros ->
+    fn ++ "!(" ++ codegenExpr i lhs ++
     (if null args then "" else ", " ++ intercalate ", " (map (codegenExpr i) args)) ++ ")"
-  EPipe lhs (ECall (EVar "map") args) ->
-    "map(&" ++ codegenExpr i lhs ++
-    (if null args then "" else ", " ++ intercalate ", " (map (codegenExpr i) args)) ++ ")"
-  -- Pipe: lhs | f(args)  →  f(lhs, args)
   EPipe lhs (ECall fn args) ->
     codegenExpr i fn ++ "(" ++ codegenExpr i lhs ++
     (if null args then "" else ", " ++ intercalate ", " (map (codegenExpr i) args)) ++ ")"
@@ -294,6 +284,7 @@ codegenExpr i expr = case expr of
                     ++ [ind (i+1) ++ codegenExpr (i+1) finalExpr]
     in "|" ++ paramStr ++ "| {\n" ++ unlines bodyLines ++ ind i ++ "}"
 
+  -- Built-in print: handle interpolated strings specially
   ECall (EVar "print") args ->
     case args of
       [EString s] ->
@@ -305,14 +296,10 @@ codegenExpr i expr = case expr of
         "println!(\"{}\", " ++ codegenExpr i e ++ ")"
       _ ->
         "println!(" ++ intercalate ", " (map (codegenExpr i) args) ++ ")"
-  ECall (EVar "len") [arg] ->
-    "len(&" ++ codegenExpr i arg ++ ")"
-  ECall (EVar "filter") (v:rest) ->
-    "filter(&" ++ codegenExpr i v ++
-    (if null rest then "" else ", " ++ intercalate ", " (map (codegenExpr i) rest)) ++ ")"
-  ECall (EVar "map") (v:rest) ->
-    "map(&" ++ codegenExpr i v ++
-    (if null rest then "" else ", " ++ intercalate ", " (map (codegenExpr i) rest)) ++ ")"
+  -- Built-in macros: range!, len!, filter!, map!, reduce!
+  ECall (EVar fn) args | fn `elem` homunMacros ->
+    fn ++ "!(" ++ intercalate ", " (map (codegenExpr i) args) ++ ")"
+  -- General function call: auto-clone variable arguments
   ECall fn args ->
     codegenExpr i fn ++ "(" ++ intercalate ", " (map (codegenArgClone i) args) ++ ")"
 
@@ -455,6 +442,10 @@ parseInterp (c:rest) =
 toUpper :: String -> String
 toUpper []     = []
 toUpper (c:cs) = (if c >= 'a' && c <= 'z' then toEnum (fromEnum c - 32) else c) : toUpper cs
+
+-- | Homun built-in names that emit as Rust macros (name!)
+homunMacros :: [String]
+homunMacros = ["range", "len", "filter", "map", "reduce"]
 
 -- | Clone variable arguments to preserve Homun's value semantics in Rust.
 --   Primitives (i32, f32, bool) are Copy so .clone() is a no-op.

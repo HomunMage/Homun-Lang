@@ -1,0 +1,18 @@
+// ─── examples/pipeline.hom ──────────────────────────────────────
+// Demonstrates: pipe |, map, filter, reduce, lambda as value
+
+main := () -> _ {
+  nums := @[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+  // pipe chain: filter evens, square them, sum
+  double := (x) -> { x * x }
+  result := nums
+    | filter((x) -> { x % 2 == 0 })
+    | map(double)
+    | reduce((a, b) -> { a + b })
+  print("Sum of squares of evens: {:?}", result)
+
+  // pipe: get odd numbers, convert to strings
+  odds := nums | filter((x) -> { x % 2 != 0 })
+  print("Odds: {:?}", odds)
+}
