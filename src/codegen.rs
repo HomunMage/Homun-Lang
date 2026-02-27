@@ -719,3 +719,43 @@ fn struct_val(i: Indent, sc: &Scope, expr: &Expr) -> String {
         _ => cg_expr(i, sc, expr),
     }
 }
+
+// ─── Tests ───────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lexer;
+    use crate::parser;
+
+    fn compile_snippet(src: &str) -> String {
+        let tokens = lexer::lex(src).expect("lex failed");
+        let ast = parser::parse(tokens).expect("parse failed");
+        let empty_set = HashSet::new();
+        let empty_map = HashMap::new();
+        codegen_program_with_resolved(&ast, &empty_set, &empty_map)
+    }
+
+    /// A2: Ok()/Err() constructors — verified: codegen emits Ok(42) and Err("fail")
+    /// No compiler changes needed; these are plain function calls.
+    #[test]
+    fn test_ok_err_codegen() {
+        let src = r#"
+main := () -> _ {
+  x := Ok(42)
+  y := Err("fail")
+}
+"#;
+        let out = compile_snippet(src);
+        assert!(
+            out.contains("Ok(42)"),
+            "codegen should emit Ok(42), got:\n{}",
+            out
+        );
+        assert!(
+            out.contains("Err(\"fail\".to_string())") || out.contains("Err(\"fail\")"),
+            "codegen should emit Err(\"fail\"), got:\n{}",
+            out
+        );
+    }
+}
