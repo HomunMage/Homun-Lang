@@ -256,7 +256,7 @@ is_ws(" ")                      // true
 
 ## Style Guide
 
-- Variables and functions: `snake_case` (enforced by compiler)
+- Variables and functions: any naming style (no enforcement)
 - Types: `PascalCase` (convention)
 - No methods — use free functions: `set(canvas, x, y, ch)` not `canvas.set(x, y, ch)`
 - No classes — structs for data, functions for behavior

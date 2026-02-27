@@ -308,7 +308,15 @@ fn cg_expr(i: Indent, sc: &Scope, expr: &Expr) -> String {
         Expr::Var(n) if n == "str" => "str_of".to_string(),
         Expr::Var(n) => n.clone(),
 
-        Expr::Field(e, field) => format!("{}.{}", cg_expr(i, sc, e), field),
+        Expr::Field(e, field) => {
+            // If the base is a PascalCase name, emit :: (enum variant) instead of . (struct field).
+            let base = cg_expr(i, sc, e);
+            if base.chars().next().is_some_and(|c| c.is_uppercase()) {
+                format!("{}::{}", base, field)
+            } else {
+                format!("{}.{}", base, field)
+            }
+        }
         Expr::Index(e, idx) => format!("{}.homun_idx({})", cg_expr(i, sc, e), cg_expr(i, sc, idx)),
 
         Expr::Slice(e, start, end, step) => {
@@ -525,6 +533,20 @@ fn cg_bin_op(i: Indent, sc: &Scope, op: &BinOp, lhs: &Expr, rhs: &Expr) -> Strin
         BinOp::Add if is_list_expr(lhs) || is_list_expr(rhs) => {
             format!("homun_concat({}, {})", l, r)
         }
+        BinOp::Add if is_str_expr(lhs) || is_str_expr(rhs) => {
+            // String concat: ensure LHS is String and RHS is &str for Rust's + operator
+            let ls = if matches!(lhs, Expr::Str(_)) {
+                format!("{}.to_string()", l)
+            } else {
+                l
+            };
+            let rs = if matches!(rhs, Expr::Str(_)) {
+                format!("&{}", r)
+            } else {
+                format!("&{}", r)
+            };
+            format!("{} + {}", ls, rs)
+        }
         BinOp::Add => format!("{} + {}", l, r),
         BinOp::Sub => format!("{} - {}", l, r),
         BinOp::Mul => format!("{} * {}", l, r),
@@ -587,8 +609,8 @@ fn cg_pat(pat: &Pat) -> String {
             let inner: Vec<String> = pats.iter().map(cg_pat).collect();
             format!("({})", inner.join(", "))
         }
-        Pat::Enum(n, None) => n.clone(),
-        Pat::Enum(n, Some(p)) => format!("{}({})", n, cg_pat(p)),
+        Pat::Enum(n, None) => n.replace('.', "::"),
+        Pat::Enum(n, Some(p)) => format!("{}({})", n.replace('.', "::"), cg_pat(p)),
     }
 }
 
@@ -749,6 +771,15 @@ fn to_upper(s: &str) -> String {
 const HOMUN_MACROS: &[&str] = &[
     "range", "len", "filter", "map", "reduce", "slice", "dict", "set",
 ];
+
+fn is_str_expr(expr: &Expr) -> bool {
+    match expr {
+        Expr::Str(_) => true,
+        Expr::BinOp(BinOp::Add, l, r) => is_str_expr(l) || is_str_expr(r),
+        Expr::Call(f, _) => matches!(f.as_ref(), Expr::Var(n) if n == "str"),
+        _ => false,
+    }
+}
 
 fn is_list_expr(expr: &Expr) -> bool {
     match expr {
@@ -1050,6 +1081,46 @@ describe := (r: Result<int, str>) -> str {
         assert!(
             out.contains("Err(msg) =>"),
             "constructor pattern Err(msg) should be emitted, got:\n{}",
+            out
+        );
+    }
+
+    /// Enum variant expressions use :: not . — Direction.TD → Direction::TD
+    #[test]
+    fn test_enum_variant_double_colon() {
+        let src = r#"
+Direction := enum { LR, TD }
+direction_default := () -> Direction { Direction.TD }
+"#;
+        let out = compile_snippet(src);
+        assert!(
+            out.contains("Direction::TD"),
+            "enum variant should use :: not ., got:\n{}",
+            out
+        );
+        assert!(
+            !out.contains("Direction.TD"),
+            "should not contain Direction.TD, got:\n{}",
+            out
+        );
+    }
+
+    /// Enum variant in match pattern uses :: — Direction.LR → Direction::LR
+    #[test]
+    fn test_enum_variant_match_pattern() {
+        let src = r#"
+Direction := enum { LR, TD }
+is_lr := (d: Direction) -> bool {
+  match d {
+    Direction.LR => true
+    _ => false
+  }
+}
+"#;
+        let out = compile_snippet(src);
+        assert!(
+            out.contains("Direction::LR"),
+            "match pattern should use :: for enum variant, got:\n{}",
             out
         );
     }

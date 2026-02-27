@@ -1,0 +1,28 @@
+// collection.hom — lists, for loops, filter, map, pipe
+
+use std
+
+main := () -> _ {
+  // list literal
+  nums := @[1, 2, 3, 4, 5, 6]
+  print("len: " + str(len(nums)))
+
+  // filter + map with pipe
+  evens := nums | filter((n) -> bool { n % 2 == 0 })
+  doubled := evens | map((n) -> int { n * 2 })
+
+  for x in doubled do {
+    print("doubled even: " + str(x))
+  }
+
+  // for loop with range
+  total := 0
+  for i in range(5) do {
+    total := total + i
+  }
+  print("sum 0..4: " + str(total))
+
+  // string interpolation
+  name := "world"
+  print("hello ${name}!")
+}

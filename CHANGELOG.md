@@ -6,7 +6,29 @@ Branches: `history` (spec drafts), `haskell` (Haskell compiler), `rust` (Rust re
 
 ---
 
-## homunc + rustc Era (v0.40+) 
+## homunc + rustc Era (v0.40+)
+
+### v0.42 — Codegen Fixes, Parser Hardening & Examples
+
+**Codegen fixes:**
+- Enum variant access emits `::` instead of `.` — `Direction.TD` → `Direction::TD`
+- Enum variant match patterns emit `::` — `Direction.LR =>` works correctly
+- String concatenation: `"str" + expr` wraps with `.to_string()` / `&` for Rust compatibility
+
+**Parser improvements:**
+- Tuple return types `(int, int)` now parsed correctly in function signatures
+- Same-line guard for `[` — prevents `expr\n[list]` from being parsed as indexing
+
+**Simplification:**
+- Removed snake_case naming enforcement from semantic analysis — any naming style now allowed
+
+**Examples:**
+- Added 5 end-to-end examples in `examples/`:
+  - `enum_variant.hom` — enum definitions, variant access, match patterns
+  - `struct_basic.hom` — struct definition, construction, field access
+  - `match_pattern.hom` — match with literals, enums, Ok/Err constructors
+  - `tuple_destructure.hom` — tuple bind, wildcard `_`, multi-return
+  - `collection.hom` — `@[]` lists, for loops, filter/map with pipe `|`
 
 ### v0.41 — Pattern Matching, Result/Option & Runtime Libraries
 

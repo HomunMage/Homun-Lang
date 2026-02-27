@@ -1,0 +1,49 @@
+// match_pattern.hom — match with literals, enums, constructors, wildcards
+
+use std
+
+Color := enum { Red, Green, Blue }
+
+color_name := (c: Color) -> str {
+  match c {
+    Color.Red   => "red"
+    Color.Green => "green"
+    Color.Blue  => "blue"
+  }
+}
+
+describe := (x: int) -> str {
+  match x {
+    0 => "zero"
+    1 => "one"
+    _ => "other"
+  }
+}
+
+safe_div := (a: int, b: int) -> Result<int, str> {
+  if (b == 0) do {
+    Err("division by zero")
+  } else {
+    Ok(a / b)
+  }
+}
+
+main := () -> _ {
+  print(color_name(Color.Red))
+  print(color_name(Color.Blue))
+  print(describe(0))
+  print(describe(1))
+  print(describe(99))
+
+  r := safe_div(10, 3)
+  match r {
+    Ok(v)   => print("result: " + str(v))
+    Err(msg) => print("error: " + msg)
+  }
+
+  r2 := safe_div(10, 0)
+  match r2 {
+    Ok(v)   => print("result: " + str(v))
+    Err(msg) => print("error: " + msg)
+  }
+}

@@ -443,6 +443,13 @@ impl Parser {
                     }
                 }
                 TokenKind::LBracket => {
+                    // Only treat as indexing if `[` is on the same line as the
+                    // preceding token. Prevents `expr\n[list]` from being parsed
+                    // as `expr[list]` (index) when `[list]` is a new statement.
+                    let cur = self.pos.min(self.tokens.len() - 1);
+                    if cur > 0 && self.tokens[cur].pos.line != self.tokens[cur - 1].pos.line {
+                        break;
+                    }
                     self.advance();
                     let result = self.parse_slice_or_index()?;
                     self.expect(&TokenKind::RBracket)?;
@@ -991,6 +998,15 @@ impl Parser {
                     }
                     _ => Ok(TypeExpr::Infer),
                 }
+            }
+            TokenKind::LParen => {
+                self.advance(); // consume (
+                let mut types = vec![self.parse_type_expr()?];
+                while self.consume(&TokenKind::Comma) {
+                    types.push(self.parse_type_expr()?);
+                }
+                self.expect(&TokenKind::RParen)?;
+                Ok(TypeExpr::Tuple(types))
             }
             TokenKind::Underscore => {
                 self.advance();

@@ -1,0 +1,22 @@
+// tuple_destructure.hom — tuple bind, wildcard _, multi-return
+
+use std
+
+triple := () -> (bool, int, int) { (true, 10, 42) }
+
+pair := () -> (int, int) { (10, 20) }
+
+main := () -> _ {
+  // basic tuple destructure
+  a, b := pair()
+  print("a=" + str(a) + " b=" + str(b))
+
+  // triple with wildcard
+  m, _, c := triple()
+  print("m=" + str(m) + " c=" + str(c))
+
+  // not on next line (was a parser bug — not should not be consumed as not-in)
+  flag, _, _ := triple()
+  result := not flag
+  print("not flag: " + str(result))
+}

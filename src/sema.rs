@@ -1,22 +1,18 @@
 /// Semantic analysis pass for Homun.
 ///
-/// 1. snake_case enforcement for variable/lambda names
-/// 2. Undefined reference check for top-level bindings
-/// 3. Mutual recursion detection
+/// 1. Undefined reference check for top-level bindings
 use crate::ast::*;
 use std::collections::HashSet;
 use std::fmt;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SemaError {
-    BadCasing(Name),
     Undefined(Name),
 }
 
 impl fmt::Display for SemaError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SemaError::BadCasing(n) => write!(f, "SEMA ERROR: '{}' must be snake_case", n),
             SemaError::Undefined(n) => write!(f, "SEMA ERROR: undefined reference '{}'", n),
         }
     }
@@ -67,7 +63,6 @@ fn run_analysis(
     if !skip_undef {
         errs.extend(check_stmts(&env0, prog));
     }
-    errs.extend(check_casing_all(prog));
     if errs.is_empty() {
         Ok(())
     } else {
@@ -75,41 +70,7 @@ fn run_analysis(
     }
 }
 
-// ─── 1. snake_case enforcement ───────────────────────────────
-
-fn check_casing_all(prog: &Program) -> Vec<SemaError> {
-    prog.iter().flat_map(check_casing_stmt).collect()
-}
-
-fn check_casing_stmt(stmt: &Stmt) -> Vec<SemaError> {
-    match stmt {
-        Stmt::Bind(n, _) => {
-            if is_type_name(n) || is_snake(n) {
-                vec![]
-            } else {
-                vec![SemaError::BadCasing(n.clone())]
-            }
-        }
-        Stmt::BindPat(pat, _) => pat_names(pat)
-            .into_iter()
-            .filter(|n| !is_type_name(n) && !is_snake(n))
-            .map(SemaError::BadCasing)
-            .collect(),
-        _ => vec![],
-    }
-}
-
-fn is_snake(n: &str) -> bool {
-    n.is_empty()
-        || n.chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
-}
-
-fn is_type_name(n: &str) -> bool {
-    n.chars().next().is_some_and(|c| c.is_uppercase())
-}
-
-// ─── 2. Undefined reference check ───────────────────────────
+// ─── Undefined reference check ──────────────────────────────
 
 fn check_stmts(env: &HashSet<String>, stmts: &[Stmt]) -> Vec<SemaError> {
     let mut errs = Vec::new();
