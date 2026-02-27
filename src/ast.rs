@@ -12,6 +12,8 @@ pub type Program = Vec<Stmt>;
 pub enum Stmt {
     Bind(Name, Expr),
     BindPat(Pat, Expr),
+    /// Lvalue assignment: `expr[idx] := rhs` or `expr.field := rhs`
+    Assign(Expr, Expr),
     Use(Vec<Name>),
     StructDef(Name, Vec<FieldDef>),
     EnumDef(Name, Vec<VariantDef>),

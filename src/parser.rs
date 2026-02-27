@@ -233,12 +233,27 @@ impl Parser {
         if self.check(&TokenKind::Assign) {
             self.advance();
             let rhs = self.parse_expr()?;
-            Ok(Stmt::Bind(name, rhs))
-        } else {
-            self.restore(saved);
-            let e = self.parse_expr()?;
-            Ok(Stmt::Expression(e))
+            return Ok(Stmt::Bind(name, rhs));
         }
+
+        // Lvalue assignment: expr[idx] := rhs  or  expr.field := rhs
+        // After consuming the ident, if next is `[` or `.`, restore and parse the full
+        // postfix chain, then check for `:=`.
+        if self.check(&TokenKind::LBracket) || self.check(&TokenKind::Dot) {
+            self.restore(saved);
+            let lhs = self.parse_expr()?;
+            if self.check(&TokenKind::Assign) {
+                self.advance();
+                let rhs = self.parse_expr()?;
+                return Ok(Stmt::Assign(lhs, rhs));
+            }
+            return Ok(Stmt::Expression(lhs));
+        }
+
+        // Fallback: expression statement
+        self.restore(saved);
+        let e = self.parse_expr()?;
+        Ok(Stmt::Expression(e))
     }
 
     fn parse_block_stmts_braced(&mut self) -> Result<Vec<Stmt>, String> {

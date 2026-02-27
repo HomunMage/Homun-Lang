@@ -131,6 +131,11 @@ fn check_stmts(env: &HashSet<String>, stmts: &[Stmt]) -> Vec<SemaError> {
 fn check_stmt(env: &HashSet<String>, stmt: &Stmt) -> Vec<SemaError> {
     match stmt {
         Stmt::Bind(_, e) | Stmt::Expression(e) | Stmt::BindPat(_, e) => check_expr(env, e),
+        Stmt::Assign(lhs, rhs) => {
+            let mut errs = check_expr(env, lhs);
+            errs.extend(check_expr(env, rhs));
+            errs
+        }
         _ => vec![],
     }
 }

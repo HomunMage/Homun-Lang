@@ -90,6 +90,7 @@ fn codegen_top_level(i: Indent, stmt: &Stmt, rs_content: &HashMap<String, String
             )
         }
         Stmt::BindPat(_, _) => String::new(), // not valid at top-level
+        Stmt::Assign(_, _) => String::new(),  // not valid at top-level
         Stmt::Expression(e) => {
             format!("{};", cg_expr(i, &HashSet::new(), e))
         }
@@ -209,6 +210,13 @@ fn cg_stmt(i: Indent, scope: &Scope, stmt: &Stmt) -> (String, Scope) {
             let mut s = scope.clone();
             bind_vars_from_pat(pat, &mut s);
             (format!("{}let ({}) = {};", ind(i), pat_s, rhs), s)
+        }
+        Stmt::Assign(lhs, rhs) => {
+            let rhs_s = cg_expr(i, scope, rhs);
+            (
+                format!("{}{} = {};", ind(i), cg_lvalue(i, scope, lhs), rhs_s),
+                scope.clone(),
+            )
         }
         Stmt::Use(path) => (format!("{}use {};", ind(i), path.join("::")), scope.clone()),
         Stmt::StructDef(name, fields) => {
@@ -601,6 +609,23 @@ fn cg_bind_var(pat: &Pat) -> String {
     }
 }
 
+/// Emit the lvalue side of an assignment.
+/// Uses `[idx as usize]` instead of `.homun_idx(idx)` so the result is mutable.
+fn cg_lvalue(i: Indent, sc: &Scope, expr: &Expr) -> String {
+    match expr {
+        Expr::Var(n) => n.clone(),
+        Expr::Field(base, field) => format!("{}.{}", cg_lvalue(i, sc, base), field),
+        Expr::Index(base, idx) => {
+            format!(
+                "{}[{} as usize]",
+                cg_lvalue(i, sc, base),
+                cg_expr(i, sc, idx)
+            )
+        }
+        _ => cg_expr(i, sc, expr),
+    }
+}
+
 fn bind_vars_from_pat(pat: &Pat, scope: &mut Scope) {
     match pat {
         Pat::Var(n) => {
@@ -872,6 +897,44 @@ foo := (opt) -> int {
         assert!(
             out.contains("Some(x) =>"),
             "constructor pattern Some(x) should emit Some(x) =>, got:\n{}",
+            out
+        );
+    }
+
+    /// A5: Simple indexed assignment — `grid[y][x] := "X"` emits `grid[y as usize][x as usize] = ...`
+    #[test]
+    fn test_index_assign_simple() {
+        let src = r#"
+foo := (grid, y, x) -> _ {
+  grid[y][x] := "X"
+}
+"#;
+        let out = compile_snippet(src);
+        assert!(
+            out.contains("grid[y as usize][x as usize]"),
+            "nested index assign should emit grid[y as usize][x as usize], got:\n{}",
+            out
+        );
+        // must be an assignment (= not let)
+        assert!(
+            !out.contains("let mut grid["),
+            "index assign must not emit let, got:\n{}",
+            out
+        );
+    }
+
+    /// A5: Field + nested index assignment — `canvas.cells[y][x] := ch`
+    #[test]
+    fn test_index_assign_field() {
+        let src = r#"
+foo := (canvas, y, x, ch) -> _ {
+  canvas.cells[y][x] := ch
+}
+"#;
+        let out = compile_snippet(src);
+        assert!(
+            out.contains("canvas.cells[y as usize][x as usize]"),
+            "field+index assign should emit canvas.cells[y as usize][x as usize], got:\n{}",
             out
         );
     }
