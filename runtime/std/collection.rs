@@ -44,3 +44,16 @@ pub fn unique<T: Clone + Eq + std::hash::Hash>(v: &[T]) -> Vec<T> {
 pub fn index_of<T: Clone + PartialEq>(v: &[T], item: &T) -> i32 {
     v.iter().position(|x| x == item).map(|i| i as i32).unwrap_or(-1)
 }
+
+pub fn push<T>(v: &mut Vec<T>, item: T) {
+    v.push(item);
+}
+
+pub fn pop<T>(v: &mut Vec<T>) -> Option<T> {
+    v.pop()
+}
+
+pub fn remove<T>(v: &mut Vec<T>, index: i32) -> T {
+    let i = if index < 0 { (v.len() as i32 + index).max(0) as usize } else { index as usize };
+    v.remove(i)
+}

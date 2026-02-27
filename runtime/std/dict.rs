@@ -13,3 +13,11 @@ pub fn values<K, V: Clone>(d: &std::collections::HashMap<K, V>) -> Vec<V> {
 pub fn entries<K: Clone, V: Clone>(d: &std::collections::HashMap<K, V>) -> Vec<(K, V)> {
     d.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
 }
+
+pub fn insert<K: Eq + std::hash::Hash, V>(d: &mut std::collections::HashMap<K, V>, key: K, val: V) {
+    d.insert(key, val);
+}
+
+pub fn remove_key<K: Eq + std::hash::Hash, V>(d: &mut std::collections::HashMap<K, V>, key: &K) -> Option<V> {
+    d.remove(key)
+}

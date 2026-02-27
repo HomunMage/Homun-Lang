@@ -98,38 +98,8 @@ async function loadExamples() {
   }));
 }
 
-// ── Runtime libraries (ext only — std is embedded in WASM compiler) ──
-// `use std` is handled natively by the compiler (embedded in binary).
-// `use ext` needs JS-side inlining since ext is a user-provided dependency.
-const LIBS = {};  // { "ext": "expanded .rs content" }
-
-async function loadLib(name, subFiles) {
-  try {
-    const parts = await Promise.all(
-      ['mod.rs', ...subFiles].map(f =>
-        fetch(`examples/${name}/${f}`).then(r => r.ok ? r.text() : '')
-      )
-    );
-    // Strip include!() lines from mod.rs, then append sub-files
-    const modRs = parts[0].split('\n').filter(l => !l.trim().startsWith('include!(')).join('\n');
-    LIBS[name] = [modRs, ...parts.slice(1)].join('\n');
-  } catch(e) { console.warn(`Failed to load lib: ${name}`, e); }
-}
-
-async function loadLibs() {
-  await loadLib('ext', ['str.rs', 'math.rs', 'collection.rs', 'dict.rs', 'stack.rs', 'deque.rs', 'io.rs']);
-}
-
-// Replace `use <name>;` with inlined .rs content in compiled Rust output.
-function inlineLibs(rustCode) {
-  for (const [name, content] of Object.entries(LIBS)) {
-    rustCode = rustCode.replace(
-      new RegExp(`^use ${name};\\s*$`, 'm'),
-      `// ── use ${name} ──\n${content}`
-    );
-  }
-  return rustCode;
-}
+// All runtime libraries (std) are embedded in the WASM compiler binary.
+// No JS-side library loading needed.
 
 // ── DOM ─────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -328,8 +298,6 @@ async function runCode() {
       return;
     }
 
-    // Step 2: Inline runtime libs (std, ext) loaded from examples/
-    rustCode = inlineLibs(rustCode);
     log('Compilation OK (' + rustCode.length + ' bytes of Rust)');
 
     // Step 3: Send to Rust Playground
@@ -403,7 +371,7 @@ document.addEventListener('mouseup', () => { if (!dragging) return; dragging = f
 
 // ── Init ────────────────────────────────────────────────────
 (async () => {
-  await Promise.all([load(), loadExamples(), loadLibs()]);
+  await Promise.all([load(), loadExamples()]);
   if (EXAMPLES.fizzbuzz) input.value = EXAMPLES.fizzbuzz;
 })();
 </script>

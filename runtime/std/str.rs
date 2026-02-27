@@ -74,3 +74,17 @@ pub fn pad_right(s: &str, width: i32, fill: &str) -> String {
     let pad = fill.repeat((w - s.len()) / fill.len().max(1) + 1);
     format!("{}{}", s, &pad[..w - s.len()])
 }
+
+pub fn char_at(s: &str, i: i32) -> String {
+    let len = s.chars().count() as i32;
+    let idx = if i < 0 { (len + i).max(0) } else { i } as usize;
+    s.chars().nth(idx).map(|c| c.to_string()).unwrap_or_default()
+}
+
+pub fn parse_int(s: &str) -> i32 {
+    s.trim().parse::<i32>().unwrap_or(0)
+}
+
+pub fn parse_float(s: &str) -> f32 {
+    s.trim().parse::<f32>().unwrap_or(0.0)
+}

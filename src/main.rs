@@ -115,11 +115,15 @@ pub fn embedded_rs(name: &str) -> Option<String> {
                 .collect::<Vec<_>>()
                 .join("\n");
             Some(format!(
-                "{}\n{}\n{}\n{}",
+                "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
                 mod_rs,
                 include_str!("../runtime/std/str.rs"),
                 include_str!("../runtime/std/math.rs"),
                 include_str!("../runtime/std/collection.rs"),
+                include_str!("../runtime/std/dict.rs"),
+                include_str!("../runtime/std/stack.rs"),
+                include_str!("../runtime/std/deque.rs"),
+                include_str!("../runtime/std/io.rs"),
             ))
         }
         _ => None,
