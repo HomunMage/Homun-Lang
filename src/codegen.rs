@@ -807,6 +807,32 @@ foo := () -> _ {
         );
     }
 
+    /// A4-L2: Tuple patterns in match arms — `(0, 1)` emits `(0, 1) =>`
+    #[test]
+    fn test_tuple_pat_match() {
+        let src = r#"
+foo := (dx, dy) -> str {
+  match (dx, dy) {
+    (0, 1) => "down"
+    (0, -1) => "up"
+    (1, 0) => "right"
+    _ => "other"
+  }
+}
+"#;
+        let out = compile_snippet(src);
+        assert!(
+            out.contains("(0, 1) =>"),
+            "tuple pattern should emit (0, 1) =>, got:\n{}",
+            out
+        );
+        assert!(
+            out.contains("(0, -1) =>"),
+            "negative tuple pattern should emit (0, -1) =>, got:\n{}",
+            out
+        );
+    }
+
     /// A2: Ok()/Err() constructors — verified: codegen emits Ok(42) and Err("fail")
     /// No compiler changes needed; these are plain function calls.
     #[test]

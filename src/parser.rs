@@ -432,6 +432,13 @@ impl Parser {
                     }
                 }
                 TokenKind::LParen => {
+                    // Only treat as a function call if `(` is on the same line
+                    // as the preceding token. Prevents match arm bodies from
+                    // greedily consuming the next arm's tuple pattern as args.
+                    let cur = self.pos.min(self.tokens.len() - 1);
+                    if cur > 0 && self.tokens[cur].pos.line != self.tokens[cur - 1].pos.line {
+                        break;
+                    }
                     let args = self.parse_arg_list()?;
                     e = Expr::Call(Box::new(e), args);
                 }
@@ -836,6 +843,36 @@ impl Parser {
                 let s = s.clone();
                 self.advance();
                 Ok(Pat::Lit(Expr::Str(s)))
+            }
+            TokenKind::Minus => {
+                self.advance();
+                match self.peek().kind.clone() {
+                    TokenKind::Int(n) => {
+                        self.advance();
+                        Ok(Pat::Lit(Expr::Int(-n)))
+                    }
+                    TokenKind::Float(n) => {
+                        self.advance();
+                        Ok(Pat::Lit(Expr::Float(-n)))
+                    }
+                    _ => Err("Expected number after '-' in pattern".to_string()),
+                }
+            }
+            TokenKind::LParen => {
+                self.advance(); // consume (
+                if self.check(&TokenKind::RParen) {
+                    self.advance();
+                    return Ok(Pat::Tuple(vec![]));
+                }
+                let mut pats = vec![self.parse_pat()?];
+                while self.consume(&TokenKind::Comma) {
+                    if self.check(&TokenKind::RParen) {
+                        break;
+                    }
+                    pats.push(self.parse_pat()?);
+                }
+                self.expect(&TokenKind::RParen)?;
+                Ok(Pat::Tuple(pats))
             }
             _ => Err(format!("Expected pattern, got {:?}", kind)),
         }
