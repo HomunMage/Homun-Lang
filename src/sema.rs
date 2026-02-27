@@ -43,11 +43,14 @@ fn run_analysis(
     imported_names: &HashSet<String>,
     skip_undef: bool,
 ) -> Result<(), Vec<SemaError>> {
-    // Builtins — always available (provided by builtin.rs preamble).
-    let builtins: HashSet<String> = ["print", "str", "int", "float", "bool"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
+    // Builtins — always available (provided by builtin.rs preamble or Rust prelude).
+    let builtins: HashSet<String> = [
+        "print", "str", "int", "float", "bool", "Ok", "Err",
+        "Some", // Result/Option constructors from Rust prelude
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
 
     let top_names: HashSet<String> = prog
         .iter()

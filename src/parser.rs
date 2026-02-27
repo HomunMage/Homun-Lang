@@ -985,7 +985,18 @@ impl Parser {
             TokenKind::Ident(ref n) => {
                 let name = n.clone();
                 self.advance();
-                Ok(TypeExpr::Name(name))
+                // Foo<T, U> — generic type params
+                if self.check(&TokenKind::Lt) {
+                    self.advance(); // consume <
+                    let mut params = vec![self.parse_type_expr()?];
+                    while self.consume(&TokenKind::Comma) {
+                        params.push(self.parse_type_expr()?);
+                    }
+                    self.expect(&TokenKind::Gt)?;
+                    Ok(TypeExpr::Generic(name, params))
+                } else {
+                    Ok(TypeExpr::Name(name))
+                }
             }
             _ => Ok(TypeExpr::Infer),
         }

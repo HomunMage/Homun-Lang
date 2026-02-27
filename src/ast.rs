@@ -148,6 +148,7 @@ pub enum TypeExpr {
     Set(Box<TypeExpr>),
     Option(Box<TypeExpr>),
     Tuple(Vec<TypeExpr>),
+    Generic(Name, Vec<TypeExpr>),
     Void,
     Infer,
 }
