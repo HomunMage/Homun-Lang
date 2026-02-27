@@ -89,6 +89,7 @@ fn codegen_top_level(i: Indent, stmt: &Stmt, rs_content: &HashMap<String, String
                 cg_expr(i, &HashSet::new(), expr)
             )
         }
+        Stmt::BindPat(_, _) => String::new(), // not valid at top-level
         Stmt::Expression(e) => {
             format!("{};", cg_expr(i, &HashSet::new(), e))
         }
@@ -201,6 +202,13 @@ fn cg_stmt(i: Indent, scope: &Scope, stmt: &Stmt) -> (String, Scope) {
                 s.insert(name.clone());
                 (format!("{}let mut {} = {};", ind(i), name, rhs), s)
             }
+        }
+        Stmt::BindPat(pat, expr) => {
+            let rhs = cg_expr(i, scope, expr);
+            let pat_s = cg_bind_pat(pat);
+            let mut s = scope.clone();
+            bind_vars_from_pat(pat, &mut s);
+            (format!("{}let ({}) = {};", ind(i), pat_s, rhs), s)
         }
         Stmt::Use(path) => (format!("{}use {};", ind(i), path.join("::")), scope.clone()),
         Stmt::StructDef(name, fields) => {
@@ -576,6 +584,37 @@ fn cg_pat(pat: &Pat) -> String {
     }
 }
 
+/// Emit the interior of `let (…) = rhs;` for a BindPat.
+/// Each variable gets `mut` prefix; wildcards pass through.
+fn cg_bind_pat(pat: &Pat) -> String {
+    match pat {
+        Pat::Tuple(pats) => pats.iter().map(cg_bind_var).collect::<Vec<_>>().join(", "),
+        _ => cg_bind_var(pat),
+    }
+}
+
+fn cg_bind_var(pat: &Pat) -> String {
+    match pat {
+        Pat::Var(n) => format!("mut {}", n),
+        Pat::Wild => "_".to_string(),
+        _ => cg_pat(pat),
+    }
+}
+
+fn bind_vars_from_pat(pat: &Pat, scope: &mut Scope) {
+    match pat {
+        Pat::Var(n) => {
+            scope.insert(n.clone());
+        }
+        Pat::Tuple(pats) => {
+            for p in pats {
+                bind_vars_from_pat(p, scope);
+            }
+        }
+        _ => {}
+    }
+}
+
 // ─── Types ───────────────────────────────────────────────────
 
 fn codegen_type(ty: &TypeExpr) -> String {
@@ -734,6 +773,38 @@ mod tests {
         let empty_set = HashSet::new();
         let empty_map = HashMap::new();
         codegen_program_with_resolved(&ast, &empty_set, &empty_map)
+    }
+
+    /// A3: Tuple destructuring bind — `a, b := expr` emits `let (mut a, mut b) = expr;`
+    #[test]
+    fn test_tuple_bind_codegen() {
+        let src = r#"
+foo := () -> _ {
+  x, y := get_pair()
+}
+"#;
+        let out = compile_snippet(src);
+        assert!(
+            out.contains("let (mut x, mut y) = get_pair()"),
+            "tuple bind should emit let destructure, got:\n{}",
+            out
+        );
+    }
+
+    /// A3: Three-element tuple destructure
+    #[test]
+    fn test_tuple_bind_three() {
+        let src = r#"
+foo := () -> _ {
+  a, b, c := triple()
+}
+"#;
+        let out = compile_snippet(src);
+        assert!(
+            out.contains("let (mut a, mut b, mut c) = triple()"),
+            "three-element tuple bind, got:\n{}",
+            out
+        );
     }
 
     /// A2: Ok()/Err() constructors — verified: codegen emits Ok(42) and Err("fail")

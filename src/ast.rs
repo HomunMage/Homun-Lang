@@ -11,6 +11,7 @@ pub type Program = Vec<Stmt>;
 #[derive(Debug, Clone)]
 pub enum Stmt {
     Bind(Name, Expr),
+    BindPat(Pat, Expr),
     Use(Vec<Name>),
     StructDef(Name, Vec<FieldDef>),
     EnumDef(Name, Vec<VariantDef>),

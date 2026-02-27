@@ -87,6 +87,11 @@ fn check_casing_stmt(stmt: &Stmt) -> Vec<SemaError> {
                 vec![SemaError::BadCasing(n.clone())]
             }
         }
+        Stmt::BindPat(pat, _) => pat_names(pat)
+            .into_iter()
+            .filter(|n| !is_type_name(n) && !is_snake(n))
+            .map(SemaError::BadCasing)
+            .collect(),
         _ => vec![],
     }
 }
@@ -112,6 +117,11 @@ fn check_stmts(env: &HashSet<String>, stmts: &[Stmt]) -> Vec<SemaError> {
             Stmt::Bind(n, _) | Stmt::StructDef(n, _) | Stmt::EnumDef(n, _) => {
                 env.insert(n.clone());
             }
+            Stmt::BindPat(pat, _) => {
+                for n in pat_names(pat) {
+                    env.insert(n);
+                }
+            }
             _ => {}
         }
     }
@@ -120,7 +130,7 @@ fn check_stmts(env: &HashSet<String>, stmts: &[Stmt]) -> Vec<SemaError> {
 
 fn check_stmt(env: &HashSet<String>, stmt: &Stmt) -> Vec<SemaError> {
     match stmt {
-        Stmt::Bind(_, e) | Stmt::Expression(e) => check_expr(env, e),
+        Stmt::Bind(_, e) | Stmt::Expression(e) | Stmt::BindPat(_, e) => check_expr(env, e),
         _ => vec![],
     }
 }
@@ -281,8 +291,21 @@ fn stmts_bound(env: &HashSet<String>, stmts: &[Stmt]) -> HashSet<String> {
             Stmt::Bind(n, _) | Stmt::StructDef(n, _) | Stmt::EnumDef(n, _) => {
                 env.insert(n.clone());
             }
+            Stmt::BindPat(pat, _) => {
+                for n in pat_names(pat) {
+                    env.insert(n);
+                }
+            }
             _ => {}
         }
     }
     env
+}
+
+fn pat_names(pat: &Pat) -> Vec<Name> {
+    match pat {
+        Pat::Var(n) => vec![n.clone()],
+        Pat::Tuple(pats) => pats.iter().flat_map(pat_names).collect(),
+        _ => vec![],
+    }
 }

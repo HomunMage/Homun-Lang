@@ -192,11 +192,44 @@ impl Parser {
 
     fn parse_block_bind(&mut self) -> Result<Stmt, String> {
         let saved = self.save();
-        let t = self.advance().clone();
-        let name = match &t.kind {
-            TokenKind::Ident(n) => n.clone(),
-            _ => "_".to_string(),
+        // Peek at first token — must be an ident to be a bind.
+        let name = match self.peek().kind.clone() {
+            TokenKind::Ident(n) => n,
+            _ => {
+                let e = self.parse_expr()?;
+                return Ok(Stmt::Expression(e));
+            }
         };
+        self.advance(); // consume the ident
+
+        // Check for tuple bind: a, b := expr
+        if self.check(&TokenKind::Comma) {
+            let mut names = vec![name];
+            while self.consume(&TokenKind::Comma) {
+                match self.peek().kind.clone() {
+                    TokenKind::Ident(n) => {
+                        self.advance();
+                        names.push(n);
+                    }
+                    _ => {
+                        self.restore(saved);
+                        let e = self.parse_expr()?;
+                        return Ok(Stmt::Expression(e));
+                    }
+                }
+            }
+            if self.check(&TokenKind::Assign) {
+                self.advance();
+                let rhs = self.parse_expr()?;
+                let pats = names.into_iter().map(Pat::Var).collect();
+                return Ok(Stmt::BindPat(Pat::Tuple(pats), rhs));
+            }
+            self.restore(saved);
+            let e = self.parse_expr()?;
+            return Ok(Stmt::Expression(e));
+        }
+
+        // Single name bind: a := expr
         if self.check(&TokenKind::Assign) {
             self.advance();
             let rhs = self.parse_expr()?;
