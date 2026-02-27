@@ -157,10 +157,14 @@ window.toggleLog = () => {
 // ── Load WASM ───────────────────────────────────────────────
 async function load() {
   try {
-    const resp = await fetch('homunc.wasm');
-    if (!resp.ok) throw new Error('homunc.wasm not found');
-    wasmBytes = await resp.arrayBuffer();
-    status.textContent = 'Ready';
+    const [wasmResp, verResp] = await Promise.all([
+      fetch('homunc.wasm'),
+      fetch('version.txt').catch(() => null)
+    ]);
+    if (!wasmResp.ok) throw new Error('homunc.wasm not found');
+    wasmBytes = await wasmResp.arrayBuffer();
+    const ver = (verResp && verResp.ok) ? (await verResp.text()).trim() : '';
+    status.textContent = ver ? `homunc ${ver}` : 'Ready';
     status.style.fontStyle = 'normal';
   } catch(e) {
     console.error('WASM load failed:', e);
@@ -344,13 +348,18 @@ async function runCode() {
     const result = await resp.json();
     log('Rust Playground responded');
 
-    if (result.stderr && !result.stdout) {
+    // Filter out Rust Playground noise from stderr
+    const stderr = (result.stderr || '').split('\n').filter(l =>
+      !l.includes('Compiling playground') && !l.includes('Finished') && !l.includes('Running `')
+    ).join('\n').trim();
+
+    if (stderr && !result.stdout) {
       log('ERROR: Rust compilation/runtime error');
-      output.textContent = result.stderr;
+      output.textContent = stderr;
       output.classList.add('text-err');
     } else {
       log('Done');
-      output.textContent = result.stdout + (result.stderr ? '\n---\n' + result.stderr : '');
+      output.textContent = result.stdout + (stderr ? '\n---\n' + stderr : '');
       output.classList.remove('text-err');
     }
   } catch(e) {
