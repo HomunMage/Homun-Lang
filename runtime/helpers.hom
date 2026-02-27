@@ -1,0 +1,15 @@
+// ============================================================
+// Homun helpers — mixed Homun + Rust
+// Compiled with: homunc --raw helpers.hom -o helpers.rs
+// ============================================================
+use helpers_imp
+
+// indent string by n levels (4 spaces each)
+indent := (n: int) -> str {
+  "    " | repeat(n)
+}
+
+// check if first character is uppercase (for type names)
+is_upper_first := (s: str) -> bool {
+  char_at(s, 0) >= "A" and char_at(s, 0) <= "Z"
+}

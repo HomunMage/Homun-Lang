@@ -7,6 +7,13 @@ ARG VERSION=dev
 WORKDIR /app
 COPY . .
 ENV HOMUN_VERSION=${VERSION}
+
+# Bootstrap: download released homunc to compile .hom files
+RUN wget -q https://github.com/HomunMage/Homun-Lang/releases/latest/download/homunc-linux-x86_64 -O /usr/local/bin/homunc \
+    && chmod +x /usr/local/bin/homunc \
+    || true
+RUN find runtime src -name '*.hom' -exec sh -c 'homunc --raw "$1" -o "${1%.hom}.rs"' _ {} \; 2>/dev/null || true
+
 RUN cargo build --release --target wasm32-wasip1
 RUN echo "${VERSION}" > /app/version.txt
 

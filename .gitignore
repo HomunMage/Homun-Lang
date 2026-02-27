@@ -10,3 +10,4 @@ Cargo.lock
 *.wasm
 
 *.patch
+.claude/

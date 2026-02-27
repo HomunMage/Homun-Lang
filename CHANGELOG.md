@@ -6,6 +6,21 @@ Branches: `history` (spec drafts), `haskell` (Haskell compiler), `rust` (Rust re
 
 ---
 
+## homunc + rustc Era (v0.40+) 
+
+### v0.40 — Starting Self-Host
+
+- Added `--raw` flag to skip preamble (for compiling modules, not standalone programs)
+- First `.hom` source file: `runtime/helpers.hom` with `use helpers_imp` pattern (mixed Homun + Rust)
+- `build.rs` auto-compiles `.hom` → `.rs` if `homunc` is in PATH; falls back to checked-in `.rs`
+- Dockerfiles bootstrap by downloading released `homunc` to compile `.hom` files before `cargo build`
+- Merged `ext` library into `runtime/std/` (dict, stack, deque, io, char_at)
+- Added practical std functions: `push`/`pop`/`remove` (vec), `insert`/`remove_key` (dict), `parse_int`/`parse_float` (str)
+- Release asset filenames no longer include version (e.g., `homunc-linux-x86_64`)
+- `cd.yml` downloads released WASM tarball instead of rebuilding
+- Playground displays WASM compiler version via `version.txt`
+- Playground removed all JS-side library loading — everything embedded in WASM compiler
+
 ## Rust Compiler Era (v0.30+)
 
 ### v0.34 — Embedded Standard Library

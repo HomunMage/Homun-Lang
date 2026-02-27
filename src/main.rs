@@ -28,24 +28,31 @@ use std::process;
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
+    // Check for --raw flag (skip preamble, for module compilation)
+    let raw = args.iter().any(|a| a == "--raw");
+    let args: Vec<&str> = args
+        .iter()
+        .filter(|a| *a != "--raw")
+        .map(|s| s.as_str())
+        .collect();
     match args.as_slice() {
-        [flag] if flag == "--help" || flag == "-h" => {
+        [flag] if *flag == "--help" || *flag == "-h" => {
             print_help();
         }
-        [flag] if flag == "--version" || flag == "-v" => {
+        [flag] if *flag == "--version" || *flag == "-v" => {
             println!("homunc {}", env!("HOMUN_VERSION"));
         }
         [] => {
-            compile_from_stdin();
+            compile_from_stdin_with(raw);
         }
         [src] => {
-            compile_to_stdout(src);
+            compile_to_stdout_with(src, raw);
         }
-        [src, flag, out] if flag == "-o" => {
-            compile_to_file(src, out);
+        [src, flag, out] if *flag == "-o" => {
+            compile_to_file_with(src, out, raw);
         }
         _ => {
-            eprintln!("Usage: homunc [input.hom] [-o output.rs]");
+            eprintln!("Usage: homunc [--raw] [input.hom] [-o output.rs]");
             process::exit(1);
         }
     }
@@ -80,7 +87,7 @@ fn print_help() {
 
 /// Compile source text directly (used for stdin / WASM — no file resolution).
 /// `use std` is handled via embedded runtime; other `use` statements pass through.
-fn compile_source(source: &str) -> Result<String, String> {
+fn compile_source(source: &str, raw: bool) -> Result<String, String> {
     use std::collections::HashMap;
     let tokens = lexer::lex(source).map_err(|e| format!("Lex error: {}", e))?;
     let ast = parser::parse(tokens).map_err(|e| format!("Parse error: {}", e))?;
@@ -100,8 +107,8 @@ fn compile_source(source: &str) -> Result<String, String> {
         }
     }
     let code = codegen::codegen_program_with_resolved(&ast, &Default::default(), &rs_content);
-    let rust_src = format!("{}{}", preamble(), code);
-    Ok(rust_src)
+    let prefix = if raw { String::new() } else { preamble() };
+    Ok(format!("{}{}", prefix, code))
 }
 
 /// Return embedded .rs content for official runtime libraries.
@@ -131,9 +138,9 @@ pub fn embedded_rs(name: &str) -> Option<String> {
 }
 
 /// Compile a .hom file, resolving multi-file `use` imports recursively.
-fn compile_file(path: &Path) -> Result<String, String> {
+fn compile_file(path: &Path, raw: bool) -> Result<String, String> {
     let resolved = resolver::resolve(path)?;
-    let mut output = preamble();
+    let mut output = if raw { String::new() } else { preamble() };
     for (i, file) in resolved.files.iter().enumerate() {
         output.push_str(&file.rust_code);
         if i + 1 < resolved.files.len() {
@@ -143,12 +150,12 @@ fn compile_file(path: &Path) -> Result<String, String> {
     Ok(output)
 }
 
-fn compile_from_stdin() {
+fn compile_from_stdin_with(raw: bool) {
     let mut src = String::new();
     io::stdin()
         .read_to_string(&mut src)
         .expect("Failed to read stdin");
-    match compile_source(&src) {
+    match compile_source(&src, raw) {
         Ok(out) => print!("{}", out),
         Err(e) => {
             eprintln!("{}", e);
@@ -157,8 +164,8 @@ fn compile_from_stdin() {
     }
 }
 
-fn compile_to_stdout(path: &str) {
-    match compile_file(Path::new(path)) {
+fn compile_to_stdout_with(path: &str, raw: bool) {
+    match compile_file(Path::new(path), raw) {
         Ok(out) => print!("{}", out),
         Err(e) => {
             eprintln!("{}", e);
@@ -167,8 +174,8 @@ fn compile_to_stdout(path: &str) {
     }
 }
 
-fn compile_to_file(src: &str, out: &str) {
-    match compile_file(Path::new(src)) {
+fn compile_to_file_with(src: &str, out: &str, raw: bool) {
+    match compile_file(Path::new(src), raw) {
         Ok(code) => {
             fs::write(out, &code).unwrap_or_else(|e| {
                 eprintln!("Cannot write {}: {}", out, e);
