@@ -33,10 +33,10 @@
 
 use regex::Regex;
 use std::cell::RefCell;
-use std::collections::HashMap;
 
 thread_local! {
-    static REGEX_CACHE: RefCell<HashMap<String, Regex>> = RefCell::new(HashMap::new());
+    static REGEX_CACHE: RefCell<std::collections::HashMap<String, Regex>> =
+        RefCell::new(std::collections::HashMap::new());
 }
 
 /// Get or compile a Regex for `pattern`, using the thread-local cache.
