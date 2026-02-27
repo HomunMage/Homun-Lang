@@ -1,0 +1,174 @@
+// test_heap.hom — Integration test for heap.rs (priority queue)
+//
+// Exercises every exported function from heap.rs via the .hom → rustc pipeline:
+//   heap_new, heap_push, heap_pop, heap_len, heap_is_empty
+//
+// Uses direct if/else + print instead of a check(cond, msg) helper to avoid
+// the &str vs String mismatch: .hom emits string literals as &str but functions
+// typed (str) in .hom generate String params in Rust.
+//
+// Compile + run:
+//   homunc runtime/test_heap.hom -o /tmp/test_heap.rs
+//   rustc /tmp/test_heap.rs -o /tmp/test_heap && /tmp/test_heap
+//
+// Expected: all lines begin with "  ok:" — no "FAIL:" lines.
+
+use heap
+
+main := () -> _ {
+  print("=== test_heap ===")
+
+  // ── heap_new / heap_is_empty / heap_len on fresh heap ──────────────────────
+  h := heap_new()
+  if (heap_is_empty(h)) do {
+    print("  ok: new heap is_empty")
+  } else {
+    print("FAIL: new heap is_empty")
+  }
+  if (heap_len(h) == 0) do {
+    print("  ok: new heap len==0")
+  } else {
+    print("FAIL: new heap len==0")
+  }
+
+  // ── heap_push increases len, clears is_empty ───────────────────────────────
+  heap_push(h, 5, "alpha")
+  if (not heap_is_empty(h)) do {
+    print("  ok: not empty after push")
+  } else {
+    print("FAIL: not empty after push")
+  }
+  if (heap_len(h) == 1) do {
+    print("  ok: len==1 after one push")
+  } else {
+    print("FAIL: len==1 after one push")
+  }
+  heap_push(h, 2, "beta")
+  if (heap_len(h) == 2) do {
+    print("  ok: len==2 after two pushes")
+  } else {
+    print("FAIL: len==2 after two pushes")
+  }
+  heap_push(h, 8, "gamma")
+  heap_push(h, 1, "delta")
+  if (heap_len(h) == 4) do {
+    print("  ok: len==4 after four pushes")
+  } else {
+    print("FAIL: len==4 after four pushes")
+  }
+
+  // ── heap_pop reduces len, drains to empty ──────────────────────────────────
+  heap_pop(h)
+  if (heap_len(h) == 3) do {
+    print("  ok: len==3 after one pop")
+  } else {
+    print("FAIL: len==3 after one pop")
+  }
+  heap_pop(h)
+  heap_pop(h)
+  heap_pop(h)
+  if (heap_len(h) == 0) do {
+    print("  ok: len==0 after draining")
+  } else {
+    print("FAIL: len==0 after draining")
+  }
+  if (heap_is_empty(h)) do {
+    print("  ok: is_empty after draining")
+  } else {
+    print("FAIL: is_empty after draining")
+  }
+
+  // ── heap_pop on empty heap does not crash ──────────────────────────────────
+  h2 := heap_new()
+  heap_pop(h2)
+  if (heap_is_empty(h2)) do {
+    print("  ok: pop on empty is safe")
+  } else {
+    print("FAIL: pop on empty is safe")
+  }
+  if (heap_len(h2) == 0) do {
+    print("  ok: len still 0 after pop on empty")
+  } else {
+    print("FAIL: len still 0 after pop on empty")
+  }
+
+  // ── min-heap order: lower priority pops first ──────────────────────────────
+  h3 := heap_new()
+  heap_push(h3, 10, "ten")
+  heap_push(h3, 3,  "three")
+  heap_push(h3, 7,  "seven")
+  heap_push(h3, 1,  "one")
+  heap_pop(h3)
+  if (heap_len(h3) == 3) do {
+    print("  ok: 3 items left after popping min")
+  } else {
+    print("FAIL: 3 items left after popping min")
+  }
+  heap_pop(h3)
+  heap_pop(h3)
+  heap_pop(h3)
+  if (heap_is_empty(h3)) do {
+    print("  ok: empty after popping all 4")
+  } else {
+    print("FAIL: empty after popping all 4")
+  }
+
+  // ── A* frontier pattern ────────────────────────────────────────────────────
+  frontier := heap_new()
+  heap_push(frontier, 10, "node_A")
+  heap_push(frontier, 3,  "node_D")
+  heap_push(frontier, 7,  "node_B")
+  heap_push(frontier, 15, "node_C")
+  if (heap_len(frontier) == 4) do {
+    print("  ok: frontier has 4 nodes")
+  } else {
+    print("FAIL: frontier has 4 nodes")
+  }
+  if (not heap_is_empty(frontier)) do {
+    print("  ok: frontier not empty")
+  } else {
+    print("FAIL: frontier not empty")
+  }
+  heap_pop(frontier)
+  if (heap_len(frontier) == 3) do {
+    print("  ok: frontier has 3 after first pop")
+  } else {
+    print("FAIL: frontier has 3 after first pop")
+  }
+  heap_push(frontier, 5, "node_E")
+  if (heap_len(frontier) == 4) do {
+    print("  ok: frontier has 4 after adding E")
+  } else {
+    print("FAIL: frontier has 4 after adding E")
+  }
+  heap_pop(frontier)
+  heap_pop(frontier)
+  heap_pop(frontier)
+  heap_pop(frontier)
+  if (heap_is_empty(frontier)) do {
+    print("  ok: frontier empty after full drain")
+  } else {
+    print("FAIL: frontier empty after full drain")
+  }
+
+  // ── negative priorities ────────────────────────────────────────────────────
+  h4 := heap_new()
+  heap_push(h4, -5, "neg5")
+  heap_push(h4,  0, "zero")
+  heap_push(h4, -1, "neg1")
+  if (heap_len(h4) == 3) do {
+    print("  ok: 3 items with mixed priorities")
+  } else {
+    print("FAIL: 3 items with mixed priorities")
+  }
+  heap_pop(h4)
+  heap_pop(h4)
+  heap_pop(h4)
+  if (heap_is_empty(h4)) do {
+    print("  ok: empty after popping neg priorities")
+  } else {
+    print("FAIL: empty after popping neg priorities")
+  }
+
+  print("=== done ===")
+}
