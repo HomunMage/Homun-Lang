@@ -823,6 +823,17 @@ impl Parser {
                         }
                         _ => Err("Expected variant name after '.'".to_string()),
                     }
+                } else if self.check(&TokenKind::LParen) {
+                    // Constructor pattern: Ok(x), Err(msg), Some(x) — same-line only
+                    let cur = self.pos.min(self.tokens.len() - 1);
+                    if cur > 0 && self.tokens[cur].pos.line == self.tokens[cur - 1].pos.line {
+                        self.advance(); // consume (
+                        let p = self.parse_pat()?;
+                        self.expect(&TokenKind::RParen)?;
+                        Ok(Pat::Enum(name, Some(Box::new(p))))
+                    } else {
+                        Ok(Pat::Var(name))
+                    }
                 } else {
                     Ok(Pat::Var(name))
                 }

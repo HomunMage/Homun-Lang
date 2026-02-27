@@ -833,6 +833,49 @@ foo := (dx, dy) -> str {
         );
     }
 
+    /// A4-L3: Constructor patterns Ok(x), Err(msg) in match arms
+    #[test]
+    fn test_constructor_pat_ok_err() {
+        let src = r#"
+foo := (result) -> str {
+  match result {
+    Ok(value) => value
+    Err(msg) => msg
+  }
+}
+"#;
+        let out = compile_snippet(src);
+        assert!(
+            out.contains("Ok(value) =>"),
+            "constructor pattern Ok(value) should emit Ok(value) =>, got:\n{}",
+            out
+        );
+        assert!(
+            out.contains("Err(msg) =>"),
+            "constructor pattern Err(msg) should emit Err(msg) =>, got:\n{}",
+            out
+        );
+    }
+
+    /// A4-L3: Some(x) constructor pattern and nested Ok(Some(x))
+    #[test]
+    fn test_constructor_pat_some_nested() {
+        let src = r#"
+foo := (opt) -> int {
+  match opt {
+    Some(x) => x
+    none => 0
+  }
+}
+"#;
+        let out = compile_snippet(src);
+        assert!(
+            out.contains("Some(x) =>"),
+            "constructor pattern Some(x) should emit Some(x) =>, got:\n{}",
+            out
+        );
+    }
+
     /// A2: Ok()/Err() constructors — verified: codegen emits Ok(42) and Err("fail")
     /// No compiler changes needed; these are plain function calls.
     #[test]
