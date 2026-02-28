@@ -60,12 +60,11 @@ Auto-detect and run formatters/linters:
 - Go → `gofmt -w .` and `golangci-lint run`
 
 ### Step 6: Git Commit
+dont commit `.claude/` `.tmp`
+
 ```bash
 # Acquire lock (if multi-worker)
 while ! mkdir _git.lock 2>/dev/null; do sleep 2; done
-
-git add -A
-git commit -m "ticket: <short description of what was done>"
 
 # Release lock
 rmdir _git.lock
