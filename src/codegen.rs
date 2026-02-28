@@ -540,11 +540,7 @@ fn cg_bin_op(i: Indent, sc: &Scope, op: &BinOp, lhs: &Expr, rhs: &Expr) -> Strin
             } else {
                 l
             };
-            let rs = if matches!(rhs, Expr::Str(_)) {
-                format!("&{}", r)
-            } else {
-                format!("&{}", r)
-            };
+            let rs = format!("&{}", r);
             format!("{} + {}", ls, rs)
         }
         BinOp::Add => format!("{} + {}", l, r),
