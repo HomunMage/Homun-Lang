@@ -14,7 +14,7 @@
 /// .rs deps are fully expanded: any `include!("...")` within them is
 /// recursively resolved and inlined, so the final output is self-contained.
 use crate::ast::*;
-use crate::{codegen, embedded_rs, lexer, parser, sema};
+use crate::{codegen_hom, embedded_rs, lexer, parser, sema_hom};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
@@ -158,39 +158,38 @@ impl Resolver {
                 let mut has_rs_dep = false;
 
                 for stmt in &ast {
-                    if let Stmt::Use(path_segs) = stmt {
-                        if path_segs.len() == 1 {
-                            let dep_name = &path_segs[0];
-                            match Self::find_dep(parent_dir, dep_name)? {
-                                Some(Found::Hom(dep_path)) => {
-                                    let dep_exports = self.resolve_file(&dep_path)?;
-                                    imported_names.extend(dep_exports);
-                                    self.resolved_hom_names.insert(dep_name.clone());
-                                }
-                                Some(Found::Rs(rs_path)) => {
-                                    let content = expand_rs_file(&rs_path)?;
-                                    self.resolved_rs_content.insert(dep_name.clone(), content);
-                                    has_rs_dep = true;
-                                }
-                                None => {
-                                    // Check embedded runtime libraries before falling through.
-                                    if !self.skip_embed {
-                                        if let Some(content) = embedded_rs(dep_name) {
-                                            self.resolved_rs_content
-                                                .insert(dep_name.clone(), content);
-                                            has_rs_dep = true;
-                                        }
-                                    } else {
-                                        // In skip_embed mode, embedded libs are still known
-                                        // to sema (skip undef checks). Mark as resolved so
-                                        // codegen drops the `use` statement entirely.
-                                        if embedded_rs(dep_name).is_some() {
-                                            has_rs_dep = true;
-                                            self.resolved_hom_names.insert(dep_name.clone());
-                                        }
+                    if let Stmt::Use(path_segs) = stmt
+                        && path_segs.len() == 1
+                    {
+                        let dep_name = &path_segs[0];
+                        match Self::find_dep(parent_dir, dep_name)? {
+                            Some(Found::Hom(dep_path)) => {
+                                let dep_exports = self.resolve_file(&dep_path)?;
+                                imported_names.extend(dep_exports);
+                                self.resolved_hom_names.insert(dep_name.clone());
+                            }
+                            Some(Found::Rs(rs_path)) => {
+                                let content = expand_rs_file(&rs_path)?;
+                                self.resolved_rs_content.insert(dep_name.clone(), content);
+                                has_rs_dep = true;
+                            }
+                            None => {
+                                // Check embedded runtime libraries before falling through.
+                                if !self.skip_embed {
+                                    if let Some(content) = embedded_rs(dep_name) {
+                                        self.resolved_rs_content.insert(dep_name.clone(), content);
+                                        has_rs_dep = true;
                                     }
-                                    // Otherwise: not a local dep — will be emitted as Rust `use`.
+                                } else {
+                                    // In skip_embed mode, embedded libs are still known
+                                    // to sema (skip undef checks). Mark as resolved so
+                                    // codegen drops the `use` statement entirely.
+                                    if embedded_rs(dep_name).is_some() {
+                                        has_rs_dep = true;
+                                        self.resolved_hom_names.insert(dep_name.clone());
+                                    }
                                 }
+                                // Otherwise: not a local dep — will be emitted as Rust `use`.
                             }
                         }
                     }
@@ -198,33 +197,27 @@ impl Resolver {
 
                 // Semantic analysis with imported names visible.
                 // If there are .rs deps, skip undefined checks (can't introspect .rs).
-                if has_rs_dep {
-                    sema::analyze_program_with_imports_skip_undef(&ast, &imported_names).map_err(
-                        |errs| {
-                            let msgs: Vec<String> = errs.iter().map(|e| e.to_string()).collect();
-                            format!(
-                                "{}: Semantic errors:\n{}",
-                                canonical.display(),
-                                msgs.join("\n")
-                            )
-                        },
-                    )?;
+                let sema_errs = if has_rs_dep {
+                    sema_hom::sema_analyze_skip_undef(
+                        ast.clone(),
+                        imported_names.iter().cloned().collect(),
+                    )
                 } else {
-                    sema::analyze_program_with_imports(&ast, &imported_names).map_err(|errs| {
-                        let msgs: Vec<String> = errs.iter().map(|e| e.to_string()).collect();
-                        format!(
-                            "{}: Semantic errors:\n{}",
-                            canonical.display(),
-                            msgs.join("\n")
-                        )
-                    })?;
+                    sema_hom::sema_analyze(ast.clone(), imported_names.iter().cloned().collect())
+                };
+                if !sema_errs.is_empty() {
+                    return Err(format!(
+                        "{}: Semantic errors:\n{}",
+                        canonical.display(),
+                        sema_errs.join("\n")
+                    ));
                 }
 
                 // Codegen, providing both resolved .hom names and .rs content.
-                let rust_code = codegen::codegen_program_with_resolved(
-                    &ast,
-                    &self.resolved_hom_names,
-                    &self.resolved_rs_content,
+                let rust_code = codegen_hom::codegen_program_with_resolved(
+                    ast.clone(),
+                    self.resolved_hom_names.clone(),
+                    self.resolved_rs_content.clone(),
                 );
 
                 let exports: HashSet<String> = ast

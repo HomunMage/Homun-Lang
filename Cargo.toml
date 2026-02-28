@@ -1,8 +1,16 @@
 [package]
 name = "homunc"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [[bin]]
 name = "homunc"
 path = "src/main.rs"
+
+[lib]
+name = "homunc"
+path = "src/lib.rs"
+crate-type = ["rlib"]
+
+[dependencies]
+regex = "1"

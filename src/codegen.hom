@@ -1,0 +1,904 @@
+// codegen.hom — Code generator: walks the Homun AST and emits Rust source text.
+//
+// Ports codegen.rs logic to .hom using:
+//   dep/ast_access.rs      — stmt_kind/expr_kind/pat_kind + typed accessors
+//   dep/scope.rs           — Scope (Rc<RefCell<HashSet<String>>>) wrapper
+//   dep/codegen_helpers.rs — ind, codegen_string, codegen_type, etc.
+//   src/codegen_dep.rs     — RsContent/HomFiles type aliases, accessors
+//
+// Public API (called from lib.rs mod codegen_hom after P2.4 wiring):
+//   codegen_program_with_resolved(prog, hom_files, rs_content) -> str
+//
+// Internal helpers mirror codegen.rs:
+//   pat_names_list, cg_clone_arg, cg_commas, cg_lvalue, cg_pat,
+//   cg_struct_val, cg_general_call, cg_bin_op, cg_print,
+//   has_str_pat_in_arms, cg_arm, cg_expr,
+//   cg_stmts, cg_body, cg_stmt,
+//   cg_top_fn, codegen_top_level_stmt, codegen_program_with_resolved
+
+// `use codegen_dep` sets has_rs_dep=true so homunc skips undefined-reference
+// checks for dep/ functions and runtime functions (join, push, replace, etc.)
+use codegen_dep
+
+
+// ─── pat_names_list ───────────────────────────────────────────────────────────
+// Flat list of variable names bound by a pattern (for BindPat scope insertion).
+
+pat_names_list := (pat: Pat) -> @[str] {
+  k := pat_kind(pat)
+  match k {
+    "Var" => @[pat_var_name(pat)]
+    "Tuple" => {
+      pats := pat_tuple_pats(pat)
+      n := len(pats)
+      names := @[]
+      i := 0
+      while (i < n) do {
+        names := vec_extend_strings(names, pat_names_list(pats[i]))
+        i := i + 1
+      }
+      names
+    }
+    _ => @[]
+  }
+}
+
+
+// ─── cg_clone_arg ─────────────────────────────────────────────────────────────
+// Emit a function argument with clone/to_string as needed.
+
+cg_clone_arg := (i: int, sc: Scope, e: Expr) -> str {
+  k := expr_kind(e)
+  if (k == "Var") do {
+    expr_var_name(e) + ".clone()"
+  } else {
+    if (k == "Str") do {
+      codegen_string(expr_str_val(e)) + ".to_string()"
+    } else {
+      if (k == "Field") do {
+        cg_expr(i, sc, e) + ".clone()"
+      } else {
+        cg_expr(i, sc, e)
+      }
+    }
+  }
+}
+
+
+// ─── cg_commas ────────────────────────────────────────────────────────────────
+// Comma-join a list of expressions.
+
+cg_commas := (i: int, sc: Scope, items: @[Expr]) -> str {
+  n := len(items)
+  parts := @[]
+  k := 0
+  while (k < n) do {
+    push(parts, cg_expr(i, sc, items[k]))
+    k := k + 1
+  }
+  join(parts, ", ")
+}
+
+
+// ─── cg_lvalue ────────────────────────────────────────────────────────────────
+// Emit an lvalue for assignment (uses [idx as usize] not .homun_idx).
+
+cg_lvalue := (i: int, sc: Scope, e: Expr) -> str {
+  k := expr_kind(e)
+  match k {
+    "Var" => expr_var_name(e)
+    "Field" => cg_lvalue(i, sc, expr_field_expr(e)) + "." + expr_field_name(e)
+    "Index" => cg_lvalue(i, sc, expr_index_expr(e)) + "[" + cg_expr(i, sc, expr_index_idx(e)) + " as usize]"
+    _ => cg_expr(i, sc, e)
+  }
+}
+
+
+// ─── cg_pat ───────────────────────────────────────────────────────────────────
+// Emit a pattern string for match arms.
+
+cg_pat := (p: Pat) -> str {
+  k := pat_kind(p)
+  match k {
+    "Wild" => "_"
+    "None" => "None"
+    "Var" => pat_var_name(p)
+    "Lit" => cg_expr(0, scope_new(), pat_lit_expr(p))
+    "Tuple" => {
+      pats := pat_tuple_pats(p)
+      n := len(pats)
+      parts := @[]
+      i := 0
+      while (i < n) do {
+        push(parts, cg_pat(pats[i]))
+        i := i + 1
+      }
+      "(" + join(parts, ", ") + ")"
+    }
+    "Enum" => {
+      name := pat_enum_name(p)
+      name2 := replace(name, ".", "::")
+      payload := pat_enum_payload(p)
+      match payload {
+        none => name2
+        Some(inner) => name2 + "(" + cg_pat(inner) + ")"
+      }
+    }
+    _ => "_"
+  }
+}
+
+
+// ─── cg_struct_val ────────────────────────────────────────────────────────────
+// Emit a struct field value with .to_string() for string literals.
+
+cg_struct_val := (i: int, sc: Scope, e: Expr) -> str {
+  if (expr_kind(e) == "Str") do {
+    codegen_string(expr_str_val(e)) + ".to_string()"
+  } else {
+    cg_expr(i, sc, e)
+  }
+}
+
+
+// ─── cg_general_call ──────────────────────────────────────────────────────────
+// Emit f(clone_args) for a general function call.
+
+cg_general_call := (i: int, sc: Scope, f: Expr, args: @[Expr]) -> str {
+  n := len(args)
+  arg_strs := @[]
+  ai := 0
+  while (ai < n) do {
+    push(arg_strs, cg_clone_arg(i, sc, args[ai]))
+    ai := ai + 1
+  }
+  cg_expr(i, sc, f) + "(" + join(arg_strs, ", ") + ")"
+}
+
+
+// ─── cg_bin_op ────────────────────────────────────────────────────────────────
+// Emit a binary operation.  op is the Debug string of BinOp.
+
+cg_bin_op := (i: int, sc: Scope, op: str, lhs: Expr, rhs: Expr) -> str {
+  l := cg_expr(i, sc, lhs)
+  r := cg_expr(i, sc, rhs)
+  match op {
+    "Add" => {
+      if (is_list_expr(lhs) or is_list_expr(rhs)) do {
+        "homun_concat(" + l + ", " + r + ")"
+      } else {
+        if (is_str_expr(lhs) or is_str_expr(rhs)) do {
+          ls := if (expr_kind(lhs) == "Str") do {
+            l + ".to_string()"
+          } else {
+            l
+          }
+          ls + " + &" + r
+        } else {
+          l + " + " + r
+        }
+      }
+    }
+    "Sub" => l + " - " + r
+    "Mul" => l + " * " + r
+    "Div" => l + " / " + r
+    "Mod" => l + " % " + r
+    "Eq" => l + " == " + r
+    "Neq" => l + " != " + r
+    "Lt" => l + " < " + r
+    "Gt" => l + " > " + r
+    "Le" => l + " <= " + r
+    "Ge" => l + " >= " + r
+    "And" => l + " && " + r
+    "Or" => l + " || " + r
+    "In" => "homun_in!(" + l + ", " + r + ")"
+    "NotIn" => "!homun_in!(" + l + ", " + r + ")"
+    _ => l + " " + op + " " + r
+  }
+}
+
+
+// ─── cg_print ─────────────────────────────────────────────────────────────────
+// Emit a println! call for print(args).
+
+cg_print := (i: int, sc: Scope, args: @[Expr]) -> str {
+  n := len(args)
+  if (n == 1 and expr_kind(args[0]) == "Str") do {
+    s := expr_str_val(args[0])
+    fmt_str, fmt_args := parse_interp(s)
+    if (len(fmt_args) == 0) do {
+      "println!(\"" + fmt_str + "\")"
+    } else {
+      "println!(\"" + fmt_str + "\", " + join(fmt_args, ", ") + ")"
+    }
+  } else {
+    if (n == 1) do {
+      "println!(\"{}\", " + cg_expr(i, sc, args[0]) + ")"
+    } else {
+      parts := @[]
+      ai := 0
+      while (ai < n) do {
+        push(parts, cg_expr(i, sc, args[ai]))
+        ai := ai + 1
+      }
+      "println!(" + join(parts, ", ") + ")"
+    }
+  }
+}
+
+
+// ─── has_str_pat_in_arms ──────────────────────────────────────────────────────
+// True if any arm has a string literal pattern.
+
+has_str_pat_in_arms := (arms: @[MatchArm]) -> bool {
+  n := len(arms)
+  i := 0
+  found := false
+  while (i < n) do {
+    p := arm_pat(arms[i])
+    if (pat_kind(p) == "Lit" and expr_kind(pat_lit_expr(p)) == "Str") do {
+      found := true
+    }
+    i := i + 1
+  }
+  found
+}
+
+
+// ─── cg_arm ───────────────────────────────────────────────────────────────────
+// Emit a single match arm.
+
+cg_arm := (i: int, sc: Scope, arm: MatchArm) -> str {
+  p := arm_pat(arm)
+  g_opt := arm_guard(arm)
+  body := arm_body(arm)
+  pat_s := cg_pat(p)
+  guard_s := match g_opt {
+    none => ""
+    Some(g) => " if " + cg_expr(i, sc, g)
+  }
+  body_s := if (expr_kind(body) == "Str") do {
+    codegen_string(expr_str_val(body)) + ".to_string()"
+  } else {
+    cg_expr(i + 1, sc, body)
+  }
+  "${ind(i + 1)}${pat_s}${guard_s} => ${body_s},"
+}
+
+
+// ─── cg_expr ──────────────────────────────────────────────────────────────────
+// Core expression code generator.  Reads sc but never mutates it.
+
+cg_expr := (i: int, sc: Scope, expr: Expr) -> str {
+  k := expr_kind(expr)
+  match k {
+    "Int" => str(expr_int_val(expr))
+    "Float" => str_of(expr_float_val(expr)) + "f32"
+    "Bool" => {
+      if (expr_bool_val(expr)) do { "true" } else { "false" }
+    }
+    "None" => "None"
+    "Str" => codegen_string(expr_str_val(expr))
+    "Var" => {
+      n := expr_var_name(expr)
+      if (n == "_") do {
+        "_"
+      } else {
+        if (n == "str") do { "str_of" } else { n }
+      }
+    }
+    "Field" => {
+      base := cg_expr(i, sc, expr_field_expr(expr))
+      field := expr_field_name(expr)
+      if (is_upper_first(base)) do {
+        base + "::" + field
+      } else {
+        base + "." + field
+      }
+    }
+    "Index" => {
+      cg_expr(i, sc, expr_index_expr(expr)) + ".homun_idx(" + cg_expr(i, sc, expr_index_idx(expr)) + ")"
+    }
+    "Slice" => {
+      base_s := cg_expr(i, sc, expr_slice_expr(expr))
+      from_opt := expr_slice_from(expr)
+      to_opt := expr_slice_to(expr)
+      step_opt := expr_slice_step(expr)
+      from_s := match from_opt {
+        none => "0"
+        Some(e) => cg_expr(i, sc, e)
+      }
+      to_s := match to_opt {
+        none => "i64::MAX"
+        Some(e) => cg_expr(i, sc, e)
+      }
+      step_s := match step_opt {
+        none => "1"
+        Some(e) => cg_expr(i, sc, e)
+      }
+      "slice!(" + base_s + ", " + from_s + ", " + to_s + ", " + step_s + ")"
+    }
+    "List" => {
+      items := expr_list_items(expr)
+      "vec![" + cg_commas(i, sc, items) + "]"
+    }
+    "Dict" => {
+      pairs := expr_dict_pairs(expr)
+      n := len(pairs)
+      parts := @[]
+      pi := 0
+      while (pi < n) do {
+        pk, pv := pairs[pi]
+        push(parts, cg_expr(i, sc, pk) + " => " + cg_expr(i, sc, pv))
+        pi := pi + 1
+      }
+      "dict![" + join(parts, ", ") + "]"
+    }
+    "Set" => {
+      items := expr_set_items(expr)
+      "set![" + cg_commas(i, sc, items) + "]"
+    }
+    "Tuple" => {
+      items := expr_tuple_items(expr)
+      "(" + cg_commas(i, sc, items) + ")"
+    }
+    "Struct" => {
+      name_opt := expr_struct_name(expr)
+      fields := expr_struct_fields(expr)
+      n := len(fields)
+      parts := @[]
+      fi := 0
+      while (fi < n) do {
+        fname, fval := fields[fi]
+        push(parts, fname + ": " + cg_struct_val(i, sc, fval))
+        fi := fi + 1
+      }
+      match name_opt {
+        Some(name) => name + " { " + join(parts, ", ") + " }"
+        none => {
+          val_parts := @[]
+          vi := 0
+          while (vi < n) do {
+            vname, vval := fields[vi]
+            push(val_parts, cg_expr(i, sc, vval))
+            vi := vi + 1
+          }
+          "(" + join(val_parts, ", ") + ")"
+        }
+      }
+    }
+    "BinOp" => {
+      op := expr_binop_op(expr)
+      lhs := expr_binop_lhs(expr)
+      rhs := expr_binop_rhs(expr)
+      cg_bin_op(i, sc, op, lhs, rhs)
+    }
+    "UnOp" => {
+      op := expr_unop_op(expr)
+      e := expr_unop_expr(expr)
+      if (op == "Not") do {
+        "!" + cg_expr(i, sc, e)
+      } else {
+        "-" + cg_expr(i, sc, e)
+      }
+    }
+    "Pipe" => {
+      lhs := expr_pipe_lhs(expr)
+      rhs := expr_pipe_rhs(expr)
+      if (expr_kind(rhs) == "Call") do {
+        f := expr_call_func(rhs)
+        args := expr_call_args(rhs)
+        if (expr_kind(f) == "Var" and is_homun_macro(expr_var_name(f))) do {
+          fn_name := expr_var_name(f)
+          lhs_s := cg_expr(i, sc, lhs)
+          if (len(args) == 0) do {
+            fn_name + "!(" + lhs_s + ")"
+          } else {
+            fn_name + "!(" + lhs_s + ", " + cg_commas(i, sc, args) + ")"
+          }
+        } else {
+          lhs_s := cg_expr(i, sc, lhs)
+          all_args := @[lhs_s]
+          ai := 0
+          while (ai < len(args)) do {
+            all_args := all_args + @[cg_expr(i, sc, args[ai])]
+            ai := ai + 1
+          }
+          cg_expr(i, sc, f) + "(" + join(all_args, ", ") + ")"
+        }
+      } else {
+        cg_expr(i, sc, rhs) + "(" + cg_expr(i, sc, lhs) + ")"
+      }
+    }
+    "Lambda" => {
+      params := expr_lambda_params(expr)
+      lam_stmts := expr_lambda_stmts(expr)
+      fe := expr_lambda_final(expr)
+      pn := len(params)
+      param_parts := @[]
+      pi := 0
+      while (pi < pn) do {
+        push(param_parts, codegen_param(params[pi]))
+        pi := pi + 1
+      }
+      param_str := join(param_parts, ", ")
+      inner_sc := scope_clone(sc)
+      pi2 := 0
+      while (pi2 < pn) do {
+        scope_insert(inner_sc, param_name(params[pi2]))
+        pi2 := pi2 + 1
+      }
+      body_lines := cg_body(i + 1, inner_sc, lam_stmts, fe)
+      "|" + param_str + "| {\n" + join(body_lines, "\n") + "\n" + ind(i) + "}"
+    }
+    "Call" => {
+      f := expr_call_func(expr)
+      args := expr_call_args(expr)
+      if (expr_kind(f) == "Var") do {
+        fname := expr_var_name(f)
+        if (fname == "print") do {
+          cg_print(i, sc, args)
+        } else {
+          if (is_homun_macro(fname)) do {
+            fname + "!(" + cg_commas(i, sc, args) + ")"
+          } else {
+            if (fname == "push" and len(args) == 2) do {
+              v_s := cg_expr(i, sc, args[0])
+              item_s := cg_clone_arg(i, sc, args[1])
+              "push(&mut " + v_s + ", " + item_s + ")"
+            } else {
+              cg_general_call(i, sc, f, args)
+            }
+          }
+        }
+      } else {
+        cg_general_call(i, sc, f, args)
+      }
+    }
+    "If" => {
+      cond := expr_if_cond(expr)
+      then_stmts := expr_if_then_stmts(expr)
+      then_fe := expr_if_then_expr(expr)
+      then_lines := cg_body(i + 1, sc, then_stmts, then_fe)
+      has_else := expr_if_has_else(expr)
+      else_str := if (has_else) do {
+        else_stmts := expr_if_else_stmts(expr)
+        else_fe := expr_if_else_expr(expr)
+        else_lines := cg_body(i + 1, sc, else_stmts, else_fe)
+        " else {\n" + join(else_lines, "\n") + "\n" + ind(i) + "}"
+      } else {
+        ""
+      }
+      "if " + cg_expr(i, sc, cond) + " {\n" + join(then_lines, "\n") + "\n" + ind(i) + "}" + else_str
+    }
+    "Match" => {
+      scrut := expr_match_scrutinee(expr)
+      arms := expr_match_arms(expr)
+      n := len(arms)
+      arm_strs := @[]
+      ai := 0
+      while (ai < n) do {
+        push(arm_strs, cg_arm(i, sc, arms[ai]))
+        ai := ai + 1
+      }
+      scrut_s := if (has_str_pat_in_arms(arms)) do {
+        cg_expr(i, sc, scrut) + ".as_str()"
+      } else {
+        cg_expr(i, sc, scrut)
+      }
+      "match " + scrut_s + " {\n" + join(arm_strs, "\n") + "\n" + ind(i) + "}"
+    }
+    "Block" => {
+      stmts := expr_block_stmts(expr)
+      fe := expr_block_final(expr)
+      body_lines := cg_body(i + 1, sc, stmts, fe)
+      "{\n" + join(body_lines, "\n") + "\n" + ind(i) + "}"
+    }
+    "For" => {
+      var := expr_for_var(expr)
+      iter := expr_for_iter(expr)
+      body_stmts := expr_for_stmts(expr)
+      fe_opt := expr_for_final(expr)
+      sc0 := scope_clone(sc)
+      scope_insert(sc0, var)
+      body_sc := scope_clone(sc0)
+      body_lines := cg_stmts(i + 1, body_sc, body_stmts)
+      match fe_opt {
+        none => {}
+        Some(fe) => {
+          is_empty_tup := expr_kind(fe) == "Tuple" and len(expr_tuple_items(fe)) == 0
+          if (not is_empty_tup) do {
+            push(body_lines, "${ind(i + 1)}${cg_expr(i + 1, sc0, fe)};")
+          }
+        }
+      }
+      "for " + var + " in " + cg_expr(i, sc, iter) + " {\n" + join(body_lines, "\n") + "\n" + ind(i) + "}"
+    }
+    "While" => {
+      cond := expr_while_cond(expr)
+      body_stmts := expr_while_stmts(expr)
+      fe_opt := expr_while_final(expr)
+      body_sc := scope_clone(sc)
+      body_lines := cg_stmts(i + 1, body_sc, body_stmts)
+      match fe_opt {
+        none => {}
+        Some(fe) => {
+          fe_sc := scope_clone(sc)
+          push(body_lines, "${ind(i + 1)}${cg_expr(i + 1, fe_sc, fe)};")
+        }
+      }
+      "while " + cg_expr(i, sc, cond) + " {\n" + join(body_lines, "\n") + "\n" + ind(i) + "}"
+    }
+    "Break" => {
+      val_opt := expr_break_value(expr)
+      match val_opt {
+        none => "break"
+        Some(v) => "return " + cg_expr(i, sc, v)
+      }
+    }
+    "Continue" => "continue"
+    "LoadRon" => {
+      path := expr_loadron_path(expr)
+      ty := expr_loadron_type(expr)
+      "ron::from_str::<" + codegen_type(ty) + ">(&std::fs::read_to_string(" + cg_expr(i, sc, path) + ").unwrap()).unwrap()"
+    }
+    "SaveRon" => {
+      data := expr_saveron_data(expr)
+      path := expr_saveron_path(expr)
+      "std::fs::write(" + cg_expr(i, sc, path) + ", ron::to_string(&" + cg_expr(i, sc, data) + ").unwrap()).unwrap()"
+    }
+    "TryUnwrap" => cg_expr(i, sc, expr_tryunwrap_expr(expr)) + "?"
+    "Range" => {
+      start_opt := expr_range_start(expr)
+      end_opt := expr_range_end(expr)
+      step_opt := expr_range_step(expr)
+      match start_opt {
+        none => {
+          match end_opt {
+            none => "(0..)"
+            Some(e) => "(0.." + cg_expr(i, sc, e) + ")"
+          }
+        }
+        Some(s) => {
+          match end_opt {
+            none => "(0..)"
+            Some(e) => {
+              match step_opt {
+                none => "(" + cg_expr(i, sc, s) + ".." + cg_expr(i, sc, e) + ")"
+                Some(st) => "(" + cg_expr(i, sc, s) + ".." + cg_expr(i, sc, e) + ").step_by(" + cg_expr(i, sc, st) + " as usize)"
+              }
+            }
+          }
+        }
+      }
+    }
+    _ => ""
+  }
+}
+
+
+// ─── cg_stmts ─────────────────────────────────────────────────────────────────
+// Process a list of statements.  Mutates sc as new names are bound.
+
+cg_stmts := (i: int, sc: Scope, stmts: @[Stmt]) -> @[str] {
+  n := len(stmts)
+  lines := @[]
+  idx := 0
+  while (idx < n) do {
+    line := cg_stmt(i, sc, stmts[idx])
+    push(lines, line)
+    idx := idx + 1
+  }
+  lines
+}
+
+
+// ─── cg_body ──────────────────────────────────────────────────────────────────
+// Emit body lines (stmts + final expr).  Uses an independent scope copy.
+
+cg_body := (i: int, sc: Scope, stmts: @[Stmt], fe: Expr) -> @[str] {
+  body_sc := scope_clone(sc)
+  lines := cg_stmts(i, body_sc, stmts)
+  fe_s := if (expr_kind(fe) == "Str") do {
+    codegen_string(expr_str_val(fe)) + ".to_string()"
+  } else {
+    cg_expr(i, body_sc, fe)
+  }
+  fe_line := "${ind(i)}${fe_s}"
+  push(lines, fe_line)
+  lines
+}
+
+
+// ─── cg_stmt ──────────────────────────────────────────────────────────────────
+// Emit a single statement.  Mutates sc in place for new bindings.
+
+cg_stmt := (i: int, sc: Scope, stmt: Stmt) -> str {
+  k := stmt_kind(stmt)
+  match k {
+    "Bind" => {
+      name := stmt_bind_name(stmt)
+      e := stmt_bind_expr(stmt)
+      if (expr_kind(e) == "Lambda") do {
+        // Inline lambda: let name = |params| { body };
+        params := expr_lambda_params(e)
+        lam_stmts := expr_lambda_stmts(e)
+        fe2 := expr_lambda_final(e)
+        pn := len(params)
+        param_parts := @[]
+        pk := 0
+        while (pk < pn) do {
+          push(param_parts, codegen_param(params[pk]))
+          pk := pk + 1
+        }
+        param_str := join(param_parts, ", ")
+        inner_sc := scope_clone(sc)
+        pi := 0
+        while (pi < pn) do {
+          scope_insert(inner_sc, param_name(params[pi]))
+          pi := pi + 1
+        }
+        body_lines := cg_body(i + 1, inner_sc, lam_stmts, fe2)
+        scope_insert(sc, name)
+        ind(i) + "let " + name + " = |" + param_str + "| {\n" + join(body_lines, "\n") + "\n" + ind(i) + "};"
+      } else {
+        // Non-lambda bind
+        rhs := if (expr_kind(e) == "Var" and scope_contains(sc, expr_var_name(e))) do {
+          expr_var_name(e) + ".clone()"
+        } else {
+          if (expr_kind(e) == "Field") do {
+            cg_expr(i, sc, e) + ".clone()"
+          } else {
+            if (expr_kind(e) == "Str" and scope_contains(sc, name)) do {
+              codegen_string(expr_str_val(e)) + ".to_string()"
+            } else {
+              cg_expr(i, sc, e)
+            }
+          }
+        }
+        if (scope_contains(sc, name)) do {
+          "${ind(i)}${name} = ${rhs};"
+        } else {
+          scope_insert(sc, name)
+          ind(i) + "let mut " + name + " = " + rhs + ";"
+        }
+      }
+    }
+    "BindPat" => {
+      pat := stmt_bindpat_pat(stmt)
+      e := stmt_bindpat_expr(stmt)
+      rhs := cg_expr(i, sc, e)
+      pk := pat_kind(pat)
+      bind_str := if (pk == "Tuple") do {
+        sub_pats := pat_tuple_pats(pat)
+        sn := len(sub_pats)
+        parts := @[]
+        si := 0
+        while (si < sn) do {
+          sp := sub_pats[si]
+          spk := pat_kind(sp)
+          part := if (spk == "Var") do {
+            "mut " + pat_var_name(sp)
+          } else {
+            if (spk == "Wild") do { "_" } else { cg_pat(sp) }
+          }
+          push(parts, part)
+          si := si + 1
+        }
+        join(parts, ", ")
+      } else {
+        if (pk == "Var") do {
+          "mut " + pat_var_name(pat)
+        } else {
+          cg_pat(pat)
+        }
+      }
+      names := pat_names_list(pat)
+      ni := 0
+      while (ni < len(names)) do {
+        scope_insert(sc, names[ni])
+        ni := ni + 1
+      }
+      ind(i) + "let (" + bind_str + ") = " + rhs + ";"
+    }
+    "Assign" => {
+      lhs := stmt_assign_lhs(stmt)
+      rhs := stmt_assign_rhs(stmt)
+      rhs_s := if (expr_kind(lhs) == "Field" and expr_kind(rhs) == "Str") do {
+        codegen_string(expr_str_val(rhs)) + ".to_string()"
+      } else {
+        cg_expr(i, sc, rhs)
+      }
+      "${ind(i)}${cg_lvalue(i, sc, lhs)} = ${rhs_s};"
+    }
+    "Use" => {
+      path := stmt_use_path(stmt)
+      ind(i) + "use " + join(path, "::") + ";"
+    }
+    "StructDef" => {
+      name := stmt_bind_name(stmt)
+      fields := stmt_structdef_fields(stmt)
+      n := len(fields)
+      field_lines := @[]
+      fi := 0
+      while (fi < n) do {
+        f := fields[fi]
+        ty_str := match fielddef_ty(f) {
+          none => "_"
+          Some(t) => codegen_type(t)
+        }
+        push(field_lines, ind(i + 1) + "pub " + fielddef_name(f) + ": " + ty_str + ",")
+        fi := fi + 1
+      }
+      scope_insert(sc, name)
+      ind(i) + "#[derive(Debug, Clone, PartialEq)]\n" + ind(i) + "struct " + name + " {\n" + join(field_lines, "\n") + "\n" + ind(i) + "}"
+    }
+    "EnumDef" => {
+      name := stmt_bind_name(stmt)
+      variants := stmt_enumdef_variants(stmt)
+      n := len(variants)
+      var_lines := @[]
+      vi := 0
+      while (vi < n) do {
+        v := variants[vi]
+        vname := variantdef_name(v)
+        vpayload := variantdef_payload(v)
+        vline := match vpayload {
+          none => "${ind(i + 1)}${vname},"
+          Some(ty) => "${ind(i + 1)}${vname}(${codegen_type(ty)}),"
+        }
+        push(var_lines, vline)
+        vi := vi + 1
+      }
+      scope_insert(sc, name)
+      ind(i) + "#[derive(Debug, Clone, PartialEq)]\n" + ind(i) + "enum " + name + " {\n" + join(var_lines, "\n") + "\n" + ind(i) + "}"
+    }
+    "Expression" => {
+      e := stmt_expression_expr(stmt)
+      "${ind(i)}${cg_expr(i, sc, e)};"
+    }
+    _ => ""
+  }
+}
+
+
+// ─── cg_top_fn ────────────────────────────────────────────────────────────────
+// Emit a top-level pub fn.
+
+cg_top_fn := (i: int, name: str, params: @[Param], ret_ty: Option<TypeExpr>, void_mark: Option<TypeExpr>, stmts: @[Stmt], fe: Expr) -> str {
+  pn := len(params)
+  param_names := @[]
+  pk := 0
+  while (pk < pn) do {
+    push(param_names, param_name(params[pk]))
+    pk := pk + 1
+  }
+  scope0 := scope_from_list(param_names)
+  param_str := codegen_params_mut(params)
+  generics := infer_generics(params)
+  gen_str := generics_str(generics)
+  ret_str := match void_mark {
+    Some(_) => ""
+    none => {
+      match ret_ty {
+        none => ""
+        Some(t) => " -> " + codegen_type(t)
+      }
+    }
+  }
+  body_lines := cg_body(i + 1, scope0, stmts, fe)
+  sig := "pub fn " + name + gen_str + "(" + param_str + ")" + ret_str + " {"
+  all_lines := @[sig] + body_lines
+  push(all_lines, "}")
+  join(all_lines, "\n")
+}
+
+
+// ─── codegen_top_level_stmt ───────────────────────────────────────────────────
+// Emit a top-level statement.
+
+codegen_top_level_stmt := (i: int, stmt: Stmt, rs_content: RsContent) -> str {
+  sk := stmt_kind(stmt)
+  match sk {
+    "Use" => {
+      path := stmt_use_path(stmt)
+      if (len(path) == 1) do {
+        content_opt := rs_content_get(rs_content, path[0])
+        match content_opt {
+          none => "use " + join(path, "::") + ";"
+          Some(content) => "// ── use " + path[0] + " ──\n" + content
+        }
+      } else {
+        "use " + join(path, "::") + ";"
+      }
+    }
+    "StructDef" => {
+      name := stmt_bind_name(stmt)
+      fields := stmt_structdef_fields(stmt)
+      n := len(fields)
+      field_lines := @[]
+      fi := 0
+      while (fi < n) do {
+        f := fields[fi]
+        ty_str := match fielddef_ty(f) {
+          none => "_"
+          Some(t) => codegen_type(t)
+        }
+        push(field_lines, ind(i + 1) + "pub " + fielddef_name(f) + ": " + ty_str + ",")
+        fi := fi + 1
+      }
+      "#[derive(Debug, Clone, PartialEq)]\npub struct " + name + " {\n" + join(field_lines, "\n") + "\n}"
+    }
+    "EnumDef" => {
+      name := stmt_bind_name(stmt)
+      variants := stmt_enumdef_variants(stmt)
+      n := len(variants)
+      var_lines := @[]
+      vi := 0
+      while (vi < n) do {
+        v := variants[vi]
+        vname := variantdef_name(v)
+        vpayload := variantdef_payload(v)
+        vline := match vpayload {
+          none => "${ind(i + 1)}${vname},"
+          Some(ty) => "${ind(i + 1)}${vname}(${codegen_type(ty)}),"
+        }
+        push(var_lines, vline)
+        vi := vi + 1
+      }
+      "#[derive(Debug, Clone, PartialEq)]\npub enum " + name + " {\n" + join(var_lines, "\n") + "\n}"
+    }
+    "Bind" => {
+      name := stmt_bind_name(stmt)
+      e := stmt_bind_expr(stmt)
+      if (expr_kind(e) == "Lambda") do {
+        params := expr_lambda_params(e)
+        ret_ty := expr_lambda_ret_ty(e)
+        void_mark := expr_lambda_void_mark(e)
+        lam_stmts := expr_lambda_stmts(e)
+        fe2 := expr_lambda_final(e)
+        cg_top_fn(i, name, params, ret_ty, void_mark, lam_stmts, fe2)
+      } else {
+        ek := expr_kind(e)
+        ty_str := if (ek == "Str") do { "&str" } else {
+          if (ek == "Int") do { "i32" } else {
+            if (ek == "Float") do { "f32" } else {
+              if (ek == "Bool") do { "bool" } else { "_" }
+            }
+          }
+        }
+        "pub const " + to_upper(name) + ": " + ty_str + " = " + cg_expr(0, scope_new(), e) + ";"
+      }
+    }
+    "BindPat" => ""
+    "Assign" => ""
+    "Expression" => cg_expr(0, scope_new(), stmt_expression_expr(stmt)) + ";"
+    _ => ""
+  }
+}
+
+
+// ─── codegen_program_with_resolved ────────────────────────────────────────────
+// Public API: emit Rust source for the entire program.
+// Skips use statements for .hom files that were resolved and inlined.
+
+codegen_program_with_resolved := (prog: @[Stmt], hom_files: HomFiles, rs_content: RsContent) -> str {
+  n := len(prog)
+  i := 0
+  parts := @[]
+  while (i < n) do {
+    s := prog[i]
+    sk := stmt_kind(s)
+    skip := if (sk == "Use") do {
+      path := stmt_use_path(s)
+      len(path) == 1 and hom_files_contains(hom_files, path[0])
+    } else {
+      false
+    }
+    if (not skip) do {
+      push(parts, codegen_top_level_stmt(0, s, rs_content))
+    }
+    i := i + 1
+  }
+  join(parts, "\n")
+}

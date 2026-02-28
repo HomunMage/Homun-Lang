@@ -11,14 +11,7 @@
 ///     -> Parser  (parser.rs)  -> Program (AST)
 ///     -> Sema    (sema.rs)    -> Checked Program
 ///     -> Codegen (codegen.rs) -> Rust source text
-#[allow(dead_code)]
-mod ast;
-mod codegen;
-#[allow(dead_code)]
-mod lexer;
-mod parser;
-mod resolver;
-mod sema;
+use homunc::{ast, codegen_hom, embedded_rs, lexer, parser, resolver, sema_hom};
 
 use std::env;
 use std::fs;
@@ -94,56 +87,23 @@ fn compile_source(source: &str, raw: bool) -> Result<String, String> {
     use std::collections::HashMap;
     let tokens = lexer::lex(source).map_err(|e| format!("Lex error: {}", e))?;
     let ast = parser::parse(tokens).map_err(|e| format!("Parse error: {}", e))?;
-    sema::analyze_program_with_imports_skip_undef(&ast, &Default::default()).map_err(|errs| {
-        let msgs: Vec<String> = errs.iter().map(|e| e.to_string()).collect();
-        format!("Semantic errors:\n{}", msgs.join("\n"))
-    })?;
+    let sema_errs = sema_hom::sema_analyze_skip_undef(ast.clone(), Vec::new());
+    if !sema_errs.is_empty() {
+        return Err(format!("Semantic errors:\n{}", sema_errs.join("\n")));
+    }
     // Resolve embedded libraries (std) for use statements.
     let mut rs_content: HashMap<String, String> = HashMap::new();
     for stmt in &ast {
-        if let ast::Stmt::Use(path) = stmt {
-            if path.len() == 1 {
-                if let Some(content) = embedded_rs(&path[0]) {
-                    rs_content.insert(path[0].clone(), content);
-                }
-            }
+        if let ast::Stmt::Use(path) = stmt
+            && path.len() == 1
+            && let Some(content) = embedded_rs(&path[0])
+        {
+            rs_content.insert(path[0].clone(), content);
         }
     }
-    let code = codegen::codegen_program_with_resolved(&ast, &Default::default(), &rs_content);
+    let code = codegen_hom::codegen_program_with_resolved(ast, Default::default(), rs_content);
     let prefix = if raw { String::new() } else { preamble() };
     Ok(format!("{}{}", prefix, code))
-}
-
-/// Return embedded .rs content for official runtime libraries.
-/// Files are embedded from `hom/` (homun-std submodule) at compiler build time.
-/// User writes `use std` — compiler resolves it to `hom/std/`.
-pub fn embedded_rs(name: &str) -> Option<String> {
-    match name {
-        "std" => {
-            let mod_rs: String = include_str!("../hom/std/mod.rs")
-                .lines()
-                .filter(|l| !l.trim().starts_with("include!("))
-                .collect::<Vec<_>>()
-                .join("\n");
-            Some(format!(
-                "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
-                mod_rs,
-                include_str!("../hom/std/str.rs"),
-                include_str!("../hom/std/math.rs"),
-                include_str!("../hom/std/collection.rs"),
-                include_str!("../hom/std/dict.rs"),
-                include_str!("../hom/std/stack.rs"),
-                include_str!("../hom/std/deque.rs"),
-                include_str!("../hom/std/io.rs"),
-            ))
-        }
-        "re" => Some(include_str!("../hom/re.rs").to_string()),
-        "heap" => Some(include_str!("../hom/heap.rs").to_string()),
-        "chars" => Some(include_str!("../hom/chars.rs").to_string()),
-        "str_ext" => Some(include_str!("../hom/str_ext.rs").to_string()),
-        "dict" => Some(include_str!("../hom/dict.rs").to_string()),
-        _ => None,
-    }
 }
 
 /// Compile a .hom file, resolving multi-file `use` imports recursively.
@@ -212,6 +172,6 @@ fn preamble() -> String {
          \n\
          // ── builtin ────────────────────────────────────────────────\n\
          {}\n",
-        include_str!("../hom/builtin.rs")
+        include_str!("hom/builtin.rs")
     )
 }

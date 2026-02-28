@@ -1,0 +1,401 @@
+// sema.hom — Semantic analysis (undefined-reference check) for Homun.
+//
+// Ports sema.rs logic to .hom using:
+//   dep/ast_access.rs  — stmt_kind/expr_kind/pat_kind + typed accessors
+//   dep/scope.rs       — Scope (Rc<RefCell<HashSet<String>>>) wrapper
+//   src/sema_dep.rs    — errs_empty/errs_one/errs_join helpers + has_rs_dep trigger
+//
+// Public API (called from lib.rs mod sema_hom after P1.4 wiring):
+//   sema_analyze(prog, imported_list)             -> @[str]  (error messages)
+//   sema_analyze_skip_undef(prog, imported_list)  -> @[str]
+//   run_sema(prog, imported_list, skip_undef)     -> @[str]
+//
+// Internal helpers (mirrors sema.rs):
+//   pat_names, extend_with_pat, stmts_bound,
+//   check_stmt, check_expr, check_arm, check_stmts
+
+// `use sema_dep` sets has_rs_dep=true so homunc skips undefined-reference
+// checks for dep/ functions (scope_*, stmt_kind, expr_kind, etc.)
+use sema_dep
+
+
+// ─── pat_names ───────────────────────────────────────────────────────────────
+// Returns a flat list of variable names bound by a pattern.
+
+pat_names := (pat: Pat) -> @[str] {
+  k := pat_kind(pat)
+  match k {
+    "Var" => @[pat_var_name(pat)]
+    "Tuple" => {
+      pats := pat_tuple_pats(pat)
+      n := len(pats)
+      i := 0
+      names := errs_empty()
+      while (i < n) do {
+        names := errs_join(names, pat_names(pats[i]))
+        i := i + 1
+      }
+      names
+    }
+    _ => errs_empty()
+  }
+}
+
+
+// ─── extend_with_pat ─────────────────────────────────────────────────────────
+// Returns a new independent Scope with all names from the pattern added.
+
+extend_with_pat := (env: Scope, pat: Pat) -> Scope {
+  result := scope_clone(env)
+  k := pat_kind(pat)
+  if (k == "Var") do {
+    scope_insert(result, pat_var_name(pat))
+  }
+  if (k == "Tuple") do {
+    pats := pat_tuple_pats(pat)
+    n := len(pats)
+    i := 0
+    while (i < n) do {
+      result := extend_with_pat(result, pats[i])
+      i := i + 1
+    }
+  }
+  if (k == "Enum") do {
+    payload := pat_enum_payload(pat)
+    match payload {
+      none => {}
+      Some(inner_pat) => {
+        result := extend_with_pat(result, inner_pat)
+      }
+    }
+  }
+  result
+}
+
+
+// ─── stmts_bound ─────────────────────────────────────────────────────────────
+// Returns a Scope that contains all names from env plus every name bound by
+// any Bind/StructDef/EnumDef/BindPat statement in stmts.
+
+stmts_bound := (env: Scope, stmts: @[Stmt]) -> Scope {
+  result := scope_clone(env)
+  n := len(stmts)
+  i := 0
+  while (i < n) do {
+    s := stmts[i]
+    k := stmt_kind(s)
+    if (k == "Bind" or k == "StructDef" or k == "EnumDef") do {
+      scope_insert(result, stmt_bind_name(s))
+    }
+    if (k == "BindPat") do {
+      names := pat_names(stmt_bindpat_pat(s))
+      j := 0
+      while (j < len(names)) do {
+        scope_insert(result, names[j])
+        j := j + 1
+      }
+    }
+    i := i + 1
+  }
+  result
+}
+
+
+// ─── check_stmts ─────────────────────────────────────────────────────────────
+// Check a sequence of statements, accumulating errors and growing the
+// environment as new names are bound.
+
+check_stmts := (env: Scope, stmts: @[Stmt]) -> @[str] {
+  local_env := scope_clone(env)
+  errs := errs_empty()
+  n := len(stmts)
+  i := 0
+  while (i < n) do {
+    s := stmts[i]
+    errs := errs_join(errs, check_stmt(local_env, s))
+    k := stmt_kind(s)
+    if (k == "Bind" or k == "StructDef" or k == "EnumDef") do {
+      scope_insert(local_env, stmt_bind_name(s))
+    }
+    if (k == "BindPat") do {
+      names := pat_names(stmt_bindpat_pat(s))
+      j := 0
+      while (j < len(names)) do {
+        scope_insert(local_env, names[j])
+        j := j + 1
+      }
+    }
+    i := i + 1
+  }
+  errs
+}
+
+
+// ─── check_stmt ──────────────────────────────────────────────────────────────
+// Check a single statement for undefined references.
+
+check_stmt := (env: Scope, stmt: Stmt) -> @[str] {
+  k := stmt_kind(stmt)
+  match k {
+    "Bind" => check_expr(env, stmt_bind_expr(stmt))
+    "Expression" => check_expr(env, stmt_expression_expr(stmt))
+    "BindPat" => check_expr(env, stmt_bindpat_expr(stmt))
+    "Assign" => errs_join(check_expr(env, stmt_assign_lhs(stmt)), check_expr(env, stmt_assign_rhs(stmt)))
+    _ => errs_empty()
+  }
+}
+
+
+// ─── check_expr ──────────────────────────────────────────────────────────────
+// Check an expression for undefined references.  Returns a list of error
+// message strings (empty means no errors).
+
+check_expr := (env: Scope, expr: Expr) -> @[str] {
+  k := expr_kind(expr)
+  match k {
+    "Var" => {
+      name := expr_var_name(expr)
+      if (name == "_" or scope_contains(env, name)) do {
+        errs_empty()
+      } else {
+        errs_one("SEMA ERROR: undefined reference '${name}'")
+      }
+    }
+    "Field" => check_expr(env, expr_field_expr(expr))
+    "Index" => errs_join(check_expr(env, expr_index_expr(expr)), check_expr(env, expr_index_idx(expr)))
+    "Slice" => {
+      base_errs := check_expr(env, expr_slice_expr(expr))
+      from_opt  := expr_slice_from(expr)
+      to_opt    := expr_slice_to(expr)
+      step_opt  := expr_slice_step(expr)
+      from_errs := match from_opt {
+        none => errs_empty()
+        Some(e) => check_expr(env, e)
+      }
+      to_errs := match to_opt {
+        none => errs_empty()
+        Some(e) => check_expr(env, e)
+      }
+      step_errs := match step_opt {
+        none => errs_empty()
+        Some(e) => check_expr(env, e)
+      }
+      errs_join(base_errs, errs_join(from_errs, errs_join(to_errs, step_errs)))
+    }
+    "List" => {
+      items := expr_list_items(expr)
+      n := len(items)
+      i := 0
+      errs := errs_empty()
+      while (i < n) do {
+        errs := errs_join(errs, check_expr(env, items[i]))
+        i := i + 1
+      }
+      errs
+    }
+    "Set" => {
+      items := expr_set_items(expr)
+      n := len(items)
+      i := 0
+      errs := errs_empty()
+      while (i < n) do {
+        errs := errs_join(errs, check_expr(env, items[i]))
+        i := i + 1
+      }
+      errs
+    }
+    "Tuple" => {
+      items := expr_tuple_items(expr)
+      n := len(items)
+      i := 0
+      errs := errs_empty()
+      while (i < n) do {
+        errs := errs_join(errs, check_expr(env, items[i]))
+        i := i + 1
+      }
+      errs
+    }
+    "Dict" => {
+      pairs := expr_dict_pairs(expr)
+      n := len(pairs)
+      i := 0
+      errs := errs_empty()
+      while (i < n) do {
+        k_e, v_e := pairs[i]
+        errs := errs_join(errs, errs_join(check_expr(env, k_e), check_expr(env, v_e)))
+        i := i + 1
+      }
+      errs
+    }
+    "Struct" => {
+      fields := expr_struct_fields(expr)
+      n := len(fields)
+      i := 0
+      errs := errs_empty()
+      while (i < n) do {
+        fname, f_e := fields[i]
+        errs := errs_join(errs, check_expr(env, f_e))
+        i := i + 1
+      }
+      errs
+    }
+    "BinOp" => errs_join(check_expr(env, expr_binop_lhs(expr)), check_expr(env, expr_binop_rhs(expr)))
+    "Pipe" => errs_join(check_expr(env, expr_pipe_lhs(expr)), check_expr(env, expr_pipe_rhs(expr)))
+    "UnOp" => check_expr(env, expr_unop_expr(expr))
+    "Call" => {
+      f_errs := check_expr(env, expr_call_func(expr))
+      args := expr_call_args(expr)
+      an := len(args)
+      ai := 0
+      arg_errs := errs_empty()
+      while (ai < an) do {
+        arg_errs := errs_join(arg_errs, check_expr(env, args[ai]))
+        ai := ai + 1
+      }
+      errs_join(f_errs, arg_errs)
+    }
+    "If" => {
+      cond_errs  := check_expr(env, expr_if_cond(expr))
+      then_errs  := errs_join(check_stmts(env, expr_if_then_stmts(expr)), check_expr(env, expr_if_then_expr(expr)))
+      else_errs  := if (expr_if_has_else(expr)) do {
+        errs_join(check_stmts(env, expr_if_else_stmts(expr)), check_expr(env, expr_if_else_expr(expr)))
+      } else {
+        errs_empty()
+      }
+      errs_join(cond_errs, errs_join(then_errs, else_errs))
+    }
+    "Match" => {
+      sc_errs := check_expr(env, expr_match_scrutinee(expr))
+      arms := expr_match_arms(expr)
+      an := len(arms)
+      ai := 0
+      arm_errs := errs_empty()
+      while (ai < an) do {
+        arm_errs := errs_join(arm_errs, check_arm(env, arms[ai]))
+        ai := ai + 1
+      }
+      errs_join(sc_errs, arm_errs)
+    }
+    "For" => {
+      v          := expr_for_var(expr)
+      iter       := expr_for_iter(expr)
+      body_stmts := expr_for_stmts(expr)
+      fe_opt     := expr_for_final(expr)
+      env2       := scope_clone(env)
+      scope_insert(env2, v)
+      iter_errs  := check_expr(env, iter)
+      body_errs  := check_stmts(env2, body_stmts)
+      env_final  := stmts_bound(env2, body_stmts)
+      fe_errs    := match fe_opt {
+        none => errs_empty()
+        Some(e) => check_expr(env_final, e)
+      }
+      errs_join(iter_errs, errs_join(body_errs, fe_errs))
+    }
+    "While" => {
+      cond       := expr_while_cond(expr)
+      body_stmts := expr_while_stmts(expr)
+      fe_opt     := expr_while_final(expr)
+      cond_errs  := check_expr(env, cond)
+      body_errs  := check_stmts(env, body_stmts)
+      env_final  := stmts_bound(env, body_stmts)
+      fe_errs    := match fe_opt {
+        none => errs_empty()
+        Some(e) => check_expr(env_final, e)
+      }
+      errs_join(cond_errs, errs_join(body_errs, fe_errs))
+    }
+    "Block" => {
+      body_stmts := expr_block_stmts(expr)
+      fe         := expr_block_final(expr)
+      body_errs  := check_stmts(env, body_stmts)
+      env_final  := stmts_bound(env, body_stmts)
+      errs_join(body_errs, check_expr(env_final, fe))
+    }
+    "Break" => {
+      val_opt := expr_break_value(expr)
+      match val_opt {
+        none => errs_empty()
+        Some(e) => check_expr(env, e)
+      }
+    }
+    "Lambda" => {
+      params     := expr_lambda_params(expr)
+      lam_stmts  := expr_lambda_stmts(expr)
+      fe         := expr_lambda_final(expr)
+      env2       := scope_clone(env)
+      pn := len(params)
+      pi := 0
+      while (pi < pn) do {
+        scope_insert(env2, param_name(params[pi]))
+        pi := pi + 1
+      }
+      lam_errs  := check_stmts(env2, lam_stmts)
+      env_final := stmts_bound(env2, lam_stmts)
+      errs_join(lam_errs, check_expr(env_final, fe))
+    }
+    "LoadRon" => check_expr(env, expr_loadron_path(expr))
+    "SaveRon" => errs_join(check_expr(env, expr_saveron_data(expr)), check_expr(env, expr_saveron_path(expr)))
+    "TryUnwrap" => check_expr(env, expr_tryunwrap_expr(expr))
+    _ => errs_empty()
+  }
+}
+
+
+// ─── check_arm ───────────────────────────────────────────────────────────────
+// Check a match arm for undefined references, extending the environment with
+// names bound by the arm's pattern.
+
+check_arm := (env: Scope, arm: MatchArm) -> @[str] {
+  p       := arm_pat(arm)
+  env2    := extend_with_pat(env, p)
+  g_opt   := arm_guard(arm)
+  body    := arm_body(arm)
+  g_errs  := match g_opt {
+    none => errs_empty()
+    Some(g) => check_expr(env2, g)
+  }
+  errs_join(g_errs, check_expr(env2, body))
+}
+
+
+// ─── run_sema ────────────────────────────────────────────────────────────────
+// Core entry point.  Builds the initial environment (builtins + top-level
+// names + imported names) and runs undefined-reference checking unless
+// skip_undef is true.
+
+run_sema := (prog: @[Stmt], imported_list: @[str], skip_undef: bool) -> @[str] {
+  builtins := scope_from_list(@["print", "str", "int", "float", "bool", "Ok", "Err", "Some"])
+
+  top_names := scope_new()
+  pn := len(prog)
+  pi := 0
+  while (pi < pn) do {
+    s := prog[pi]
+    k := stmt_kind(s)
+    if (k == "Bind" or k == "StructDef" or k == "EnumDef") do {
+      scope_insert(top_names, stmt_bind_name(s))
+    }
+    pi := pi + 1
+  }
+
+  imported := scope_from_list(imported_list)
+  env0     := scope_union(scope_union(builtins, top_names), imported)
+
+  errs := errs_empty()
+  if (not skip_undef) do {
+    errs := check_stmts(env0, prog)
+  }
+  errs
+}
+
+
+// ─── Public API ──────────────────────────────────────────────────────────────
+
+sema_analyze := (prog: @[Stmt], imported_list: @[str]) -> @[str] {
+  run_sema(prog, imported_list, false)
+}
+
+sema_analyze_skip_undef := (prog: @[Stmt], imported_list: @[str]) -> @[str] {
+  run_sema(prog, imported_list, true)
+}
