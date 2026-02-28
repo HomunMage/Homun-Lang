@@ -87,18 +87,6 @@ hp     := int(100)         // explicit type via constructor
 greeting := "Hello, ${name}! HP: ${hp * 2}"
 ```
 
-### Naming
-
-Variables and lambdas **must** be `snake_case` — enforced by compiler. 
-Types are recommended `PascalCase` — not enforced but strong convention.
-
-```
-player_hp := 100           // VALID
-playerHp  := 100           // INVALID — compiler error
-
-PlayerState := struct { hp: int, alive: bool }   // PascalCase for types
-```
-
 ### Primitive Types
 
 | Type | Example | Notes |
@@ -442,23 +430,52 @@ opencv/
 
 From outside: `use opencv` resolves to `opencv/mod.hom`, which pulls in siblings via normal `use`.
 
-### Standard library
+### Standard library (`hom/`)
+
+Runtime libraries live in the `hom/` submodule ([homun-std](https://github.com/HomunMage/homun-std)).
+User writes `use std` — the compiler resolves it to `hom/std/`.
 
 ```
 use std    // provides: range, len, filter, map, reduce, split, join, abs, min, max, ...
-use ext    // extended library: io, stack, deque, dict helpers, ...
+use re     // regex: re_match, re_is_match, re_replace, re_split
+use heap   // priority queue: heap_new, heap_push, heap_pop, heap_peek
+use chars  // char utils: is_alpha, is_digit, is_alnum, is_space
 ```
 
-`std` and `ext` follow the same resolution rule — no special-casing. They resolve to `std/mod.rs` and `ext/mod.rs` in the examples directory.
-
-### Self-contained output
-
-The compiler inlines everything: `runtime/builtin.rs` is embedded in the compiler binary, and all `.rs` dependencies (including nested `include!()` within them) are recursively expanded. The generated `.rs` file compiles with `rustc` standalone — no external files needed.
+**Standalone usage** — the runtime is embedded in the `homunc` binary. No external dependencies needed:
 
 ```bash
 homunc main.hom -o main.rs
-rustc main.rs -o main        # no builtin.rs or std.rs needed
+rustc main.rs -o main        # self-contained, no hom/ needed
 ```
+
+**Multi-module Cargo projects** — add [homun-std](https://github.com/HomunMage/homun-std) as a git submodule so all modules share one runtime:
+
+```bash
+git submodule add https://github.com/HomunMage/homun-std.git src/hom
+```
+
+Then in `build.rs`, concatenate `src/hom/*.rs` into a shared `runtime.rs`.
+Each `.hom` module is compiled with `homunc --module` which strips runtime embedding:
+
+```bash
+homunc --module src/types.hom -o out/types.rs
+```
+
+---
+
+## Testing
+
+Tests live in `tests/`:
+
+```bash
+cargo test                    # run all tests
+cargo test --test examples    # run _site/examples/*.hom integration tests
+cargo test --test hom_std     # run hom-std runtime tests
+```
+
+- `tests/examples.rs` — compiles and runs every `_site/examples/*.hom` file
+- `tests/hom_std.rs` — compiles and runs `runtime/test_*.hom` (hom-std tests)
 
 ---
 

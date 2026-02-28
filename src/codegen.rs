@@ -44,7 +44,7 @@ fn codegen_top_level(i: Indent, stmt: &Stmt, rs_content: &HashMap<String, String
         }
         Stmt::StructDef(name, fields) => {
             let mut lines = vec![
-                "#[derive(Debug, Clone)]".to_string(),
+                "#[derive(Debug, Clone, PartialEq)]".to_string(),
                 format!("pub struct {} {{", name),
             ];
             for f in fields {
@@ -55,7 +55,7 @@ fn codegen_top_level(i: Indent, stmt: &Stmt, rs_content: &HashMap<String, String
         }
         Stmt::EnumDef(name, variants) => {
             let mut lines = vec![
-                "#[derive(Debug, Clone)]".to_string(),
+                "#[derive(Debug, Clone, PartialEq)]".to_string(),
                 format!("pub enum {} {{", name),
             ];
             for v in variants {
@@ -222,7 +222,7 @@ fn cg_stmt(i: Indent, scope: &Scope, stmt: &Stmt) -> (String, Scope) {
         Stmt::StructDef(name, fields) => {
             let field_lines: Vec<String> = fields.iter().map(|f| codegen_field(i + 1, f)).collect();
             let line = format!(
-                "{}#[derive(Debug,Clone)]\n{}struct {} {{\n{}\n{}}}",
+                "{}#[derive(Debug, Clone, PartialEq)]\n{}struct {} {{\n{}\n{}}}",
                 ind(i),
                 ind(i),
                 name,
@@ -237,7 +237,7 @@ fn cg_stmt(i: Indent, scope: &Scope, stmt: &Stmt) -> (String, Scope) {
             let var_lines: Vec<String> =
                 variants.iter().map(|v| codegen_variant(i + 1, v)).collect();
             let line = format!(
-                "{}#[derive(Debug,Clone)]\n{}enum {} {{\n{}\n{}}}",
+                "{}#[derive(Debug, Clone, PartialEq)]\n{}enum {} {{\n{}\n{}}}",
                 ind(i),
                 ind(i),
                 name,
@@ -1207,7 +1207,7 @@ main := () -> _ {
              unused_macros, unused_assignments)]\n",
             "#![allow(non_snake_case)]\n",
             "// ── builtin ────────────────────────────────────────────────\n",
-            include_str!("../runtime/builtin.rs"),
+            include_str!("../hom/builtin.rs"),
             "\n"
         );
 

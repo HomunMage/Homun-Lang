@@ -1,0 +1,6 @@
+[submodule "hom-std"]
+	path = hom
+	url = ../homun-std
+[submodule "examples-hom-std"]
+	path = _site/examples/hom
+	url = ../homun-std

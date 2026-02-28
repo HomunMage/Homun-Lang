@@ -8,6 +8,30 @@ Branches: `history` (spec drafts), `haskell` (Haskell compiler), `rust` (Rust re
 
 
 
+### v0.50 — hom-std Submodule, --module Flag & Integration Tests
+
+**Runtime refactor:**
+- Extracted runtime libraries into [homun-std](https://github.com/HomunMage/homun-std) git submodule at `hom/`
+- Compiler now reads runtime from `hom/` submodule (`include_str!("../hom/...")`) instead of `runtime/`
+- `use std`, `use re`, `use heap` etc. — compiler resolves to `hom/std/`, `hom/re.rs`, `hom/heap.rs`
+- Standalone usage unchanged — runtime embedded in `homunc` binary, no `hom/` needed on disk
+
+**Multi-module Cargo support:**
+- Added `--module` flag — skips preamble and runtime embedding for multi-module Cargo projects
+- Projects add `homun-std` as submodule, `build.rs` concatenates `hom/*.rs` into shared `runtime.rs`
+- Added `PartialEq` to all derived traits (structs and enums)
+
+**Testing:**
+- Added `tests/examples.rs` — compiles and runs all `_site/examples/*.hom` (7 tests)
+- Added `tests/hom_std.rs` — compiles and runs runtime test files (chars, heap)
+- 24 total tests (15 unit + 7 examples + 2 hom-std)
+
+**Submodule setup:**
+- `hom/` — homun-std runtime (builtin, std, re, heap, chars, str_ext, dict)
+- `_site/examples/hom/` — same submodule, so examples can `use std` via resolver
+
+---
+
 ### v0.43 — Codegen Fixes, Parser Hardening & Examples
 
 **Codegen fixes:**

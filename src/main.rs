@@ -30,9 +30,12 @@ fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
     // Check for --raw flag (skip preamble, for module compilation)
     let raw = args.iter().any(|a| a == "--raw");
+    // Check for --module flag (skip preamble + don't embed runtime libs)
+    let module = args.iter().any(|a| a == "--module");
+    let raw = raw || module; // --module implies --raw
     let args: Vec<&str> = args
         .iter()
-        .filter(|a| *a != "--raw")
+        .filter(|a| *a != "--raw" && *a != "--module")
         .map(|s| s.as_str())
         .collect();
     match args.as_slice() {
@@ -46,13 +49,13 @@ fn main() {
             compile_from_stdin_with(raw);
         }
         [src] => {
-            compile_to_stdout_with(src, raw);
+            compile_to_stdout_with(src, raw, module);
         }
         [src, flag, out] if *flag == "-o" => {
-            compile_to_file_with(src, out, raw);
+            compile_to_file_with(src, out, raw, module);
         }
         _ => {
-            eprintln!("Usage: homunc [--raw] [input.hom] [-o output.rs]");
+            eprintln!("Usage: homunc [--raw|--module] [input.hom] [-o output.rs]");
             process::exit(1);
         }
     }
@@ -112,11 +115,12 @@ fn compile_source(source: &str, raw: bool) -> Result<String, String> {
 }
 
 /// Return embedded .rs content for official runtime libraries.
-/// Files are embedded from `runtime/` at compiler build time.
+/// Files are embedded from `hom/` (homun-std submodule) at compiler build time.
+/// User writes `use std` — compiler resolves it to `hom/std/`.
 pub fn embedded_rs(name: &str) -> Option<String> {
     match name {
         "std" => {
-            let mod_rs: String = include_str!("../runtime/std/mod.rs")
+            let mod_rs: String = include_str!("../hom/std/mod.rs")
                 .lines()
                 .filter(|l| !l.trim().starts_with("include!("))
                 .collect::<Vec<_>>()
@@ -124,22 +128,31 @@ pub fn embedded_rs(name: &str) -> Option<String> {
             Some(format!(
                 "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
                 mod_rs,
-                include_str!("../runtime/std/str.rs"),
-                include_str!("../runtime/std/math.rs"),
-                include_str!("../runtime/std/collection.rs"),
-                include_str!("../runtime/std/dict.rs"),
-                include_str!("../runtime/std/stack.rs"),
-                include_str!("../runtime/std/deque.rs"),
-                include_str!("../runtime/std/io.rs"),
+                include_str!("../hom/std/str.rs"),
+                include_str!("../hom/std/math.rs"),
+                include_str!("../hom/std/collection.rs"),
+                include_str!("../hom/std/dict.rs"),
+                include_str!("../hom/std/stack.rs"),
+                include_str!("../hom/std/deque.rs"),
+                include_str!("../hom/std/io.rs"),
             ))
         }
+        "re" => Some(include_str!("../hom/re.rs").to_string()),
+        "heap" => Some(include_str!("../hom/heap.rs").to_string()),
+        "chars" => Some(include_str!("../hom/chars.rs").to_string()),
+        "str_ext" => Some(include_str!("../hom/str_ext.rs").to_string()),
+        "dict" => Some(include_str!("../hom/dict.rs").to_string()),
         _ => None,
     }
 }
 
 /// Compile a .hom file, resolving multi-file `use` imports recursively.
-fn compile_file(path: &Path, raw: bool) -> Result<String, String> {
-    let resolved = resolver::resolve(path)?;
+fn compile_file(path: &Path, raw: bool, module: bool) -> Result<String, String> {
+    let resolved = if module {
+        resolver::resolve_module(path)?
+    } else {
+        resolver::resolve(path)?
+    };
     let mut output = if raw { String::new() } else { preamble() };
     for (i, file) in resolved.files.iter().enumerate() {
         output.push_str(&file.rust_code);
@@ -164,8 +177,8 @@ fn compile_from_stdin_with(raw: bool) {
     }
 }
 
-fn compile_to_stdout_with(path: &str, raw: bool) {
-    match compile_file(Path::new(path), raw) {
+fn compile_to_stdout_with(path: &str, raw: bool, module: bool) {
+    match compile_file(Path::new(path), raw, module) {
         Ok(out) => print!("{}", out),
         Err(e) => {
             eprintln!("{}", e);
@@ -174,8 +187,8 @@ fn compile_to_stdout_with(path: &str, raw: bool) {
     }
 }
 
-fn compile_to_file_with(src: &str, out: &str, raw: bool) {
-    match compile_file(Path::new(src), raw) {
+fn compile_to_file_with(src: &str, out: &str, raw: bool, module: bool) {
+    match compile_file(Path::new(src), raw, module) {
         Ok(code) => {
             fs::write(out, &code).unwrap_or_else(|e| {
                 eprintln!("Cannot write {}: {}", out, e);
@@ -199,6 +212,6 @@ fn preamble() -> String {
          \n\
          // ── builtin ────────────────────────────────────────────────\n\
          {}\n",
-        include_str!("../runtime/builtin.rs")
+        include_str!("../hom/builtin.rs")
     )
 }

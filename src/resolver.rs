@@ -55,16 +55,21 @@ struct Resolver {
     resolved_hom_names: HashSet<String>,
     /// Map from `use` target name to its fully-expanded .rs content.
     resolved_rs_content: HashMap<String, String>,
+    /// When true, embedded runtime libraries (std, re, heap, chars) are NOT
+    /// inlined — they are emitted as plain Rust `use` statements instead.
+    /// Used for module compilation where the parent crate provides runtime.
+    skip_embed: bool,
 }
 
 impl Resolver {
-    fn new() -> Self {
+    fn new(skip_embed: bool) -> Self {
         Self {
             color: HashMap::new(),
             stack: Vec::new(),
             files: Vec::new(),
             resolved_hom_names: HashSet::new(),
             resolved_rs_content: HashMap::new(),
+            skip_embed,
         }
     }
 
@@ -169,9 +174,20 @@ impl Resolver {
                                 }
                                 None => {
                                     // Check embedded runtime libraries before falling through.
-                                    if let Some(content) = embedded_rs(dep_name) {
-                                        self.resolved_rs_content.insert(dep_name.clone(), content);
-                                        has_rs_dep = true;
+                                    if !self.skip_embed {
+                                        if let Some(content) = embedded_rs(dep_name) {
+                                            self.resolved_rs_content
+                                                .insert(dep_name.clone(), content);
+                                            has_rs_dep = true;
+                                        }
+                                    } else {
+                                        // In skip_embed mode, embedded libs are still known
+                                        // to sema (skip undef checks). Mark as resolved so
+                                        // codegen drops the `use` statement entirely.
+                                        if embedded_rs(dep_name).is_some() {
+                                            has_rs_dep = true;
+                                            self.resolved_hom_names.insert(dep_name.clone());
+                                        }
                                     }
                                     // Otherwise: not a local dep — will be emitted as Rust `use`.
                                 }
@@ -239,7 +255,17 @@ impl Resolver {
 /// Resolve all dependencies starting from `entry_path` and return
 /// compiled fragments in topological order (leaves first).
 pub fn resolve(entry_path: &Path) -> Result<ResolvedProgram, String> {
-    let mut resolver = Resolver::new();
+    let mut resolver = Resolver::new(false);
+    resolver.resolve_file(entry_path)?;
+    Ok(ResolvedProgram {
+        files: resolver.files,
+    })
+}
+
+/// Like `resolve`, but skips embedding runtime libraries (std, re, heap, chars).
+/// Used for module compilation where the parent crate provides runtime.
+pub fn resolve_module(entry_path: &Path) -> Result<ResolvedProgram, String> {
+    let mut resolver = Resolver::new(true);
     resolver.resolve_file(entry_path)?;
     Ok(ResolvedProgram {
         files: resolver.files,
