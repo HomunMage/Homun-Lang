@@ -127,6 +127,7 @@ See `.claude/skills/claude-bot/` for the full skill, example scripts, and planni
 
 ## Rules
 
+- **Always read `llm.txt`** before writing or modifying `.hom` code — it is the Homun language specification.
 - **ONE ticket per session.** Small steps. Do not batch multiple tickets.
 - **Never ask questions.** Make reasonable decisions and document them in the commit message.
 - **Stay in your assigned scope.** Don't touch files outside your task boundary.

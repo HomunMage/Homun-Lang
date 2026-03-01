@@ -43,6 +43,7 @@ pub enum Expr {
     Float(f64),
     Bool(bool),
     Str(String),
+    Char(char),
     None,
 
     // Variables / field access

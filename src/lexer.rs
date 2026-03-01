@@ -19,6 +19,7 @@ pub enum TokenKind {
     Float(f64),
     Bool(bool),
     Str(String),
+    Char(char),
     None,
     // Identifiers & Keywords
     Ident(String),
@@ -171,6 +172,51 @@ pub fn lex(source: &str) -> Result<Vec<Token>, String> {
             }
             tokens.push(Token {
                 kind: TokenKind::Str(s),
+                pos,
+            });
+            continue;
+        }
+
+        // Char literal: 'x' or '\n'
+        if c == '\'' {
+            i += 1;
+            col += 1;
+            if i >= chars.len() {
+                return Err("Unterminated char literal".to_string());
+            }
+            let ch = if chars[i] == '\\' {
+                i += 1;
+                col += 1;
+                if i >= chars.len() {
+                    return Err("Unterminated char literal".to_string());
+                }
+                let esc = match chars[i] {
+                    'n' => '\n',
+                    't' => '\t',
+                    '\\' => '\\',
+                    '\'' => '\'',
+                    '0' => '\0',
+                    other => other,
+                };
+                i += 1;
+                col += 1;
+                esc
+            } else {
+                let ch = chars[i];
+                i += 1;
+                col += 1;
+                ch
+            };
+            if i >= chars.len() || chars[i] != '\'' {
+                return Err(format!(
+                    "Unterminated char literal at line {}, col {}",
+                    pos.line, pos.col
+                ));
+            }
+            i += 1;
+            col += 1;
+            tokens.push(Token {
+                kind: TokenKind::Char(ch),
                 pos,
             });
             continue;

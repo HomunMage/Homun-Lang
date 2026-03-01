@@ -6,6 +6,16 @@ Branches: `history` (spec drafts), `haskell` (Haskell compiler), `rust` (Rust re
 
 ---
 
+### v0.61 — Char Type & Naming Conventions
+
+- Added `char` type: `'x'` literals map to Rust `char`, supports escapes (`'\n'`, `'\t'`, `'\\'`, `'\0'`)
+- Char in all compiler stages: lexer (`TokenKind::Char`), AST (`Expr::Char`), parser, codegen, type inference
+- Type annotation `char` maps to Rust `char`; top-level char bindings infer `pub const X: char`
+- Renamed `_dep.rs` → `_imp.rs` convention (`codegen_imp.rs`, `sema_imp.rs`)
+- Fixed CI: added missing `src/hom` submodule pointer, converted `_site/examples/hom` from symlink to submodule
+
+---
+
 ### v0.60 — Self-Hosting Compiler
 
 - Rewrote `codegen.rs` and `sema.rs` in Homun (`src/codegen.hom`, `src/sema.hom`) — compiler now compiles itself

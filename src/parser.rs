@@ -542,6 +542,10 @@ impl Parser {
                 self.advance();
                 Ok(Expr::Str(s))
             }
+            TokenKind::Char(c) => {
+                self.advance();
+                Ok(Expr::Char(c))
+            }
             TokenKind::None => {
                 self.advance();
                 Ok(Expr::None)
@@ -890,6 +894,10 @@ impl Parser {
                 let s = s.clone();
                 self.advance();
                 Ok(Pat::Lit(Expr::Str(s)))
+            }
+            TokenKind::Char(c) => {
+                self.advance();
+                Ok(Pat::Lit(Expr::Char(c)))
             }
             TokenKind::Minus => {
                 self.advance();

@@ -278,6 +278,15 @@ cg_expr := (i: int, sc: Scope, expr: Expr) -> str {
       if (expr_bool_val(expr)) do { "true" } else { "false" }
     }
     "None" => "None"
+    "Char" => {
+      c := expr_char_val(expr)
+      if (c == "\\") do { "'\\\\'" }
+      else { if (c == "'") do { "'\\''" }
+      else { if (c == "\n") do { "'\\n'" }
+      else { if (c == "\t") do { "'\\t'" }
+      else { if (c == "\0") do { "'\\0'" }
+      else { "'" + c + "'" } } } } }
+    }
     "Str" => codegen_string(expr_str_val(expr))
     "Var" => {
       n := expr_var_name(expr)
@@ -863,7 +872,9 @@ codegen_top_level_stmt := (i: int, stmt: Stmt, rs_content: RsContent) -> str {
         ty_str := if (ek == "Str") do { "&str" } else {
           if (ek == "Int") do { "i32" } else {
             if (ek == "Float") do { "f32" } else {
-              if (ek == "Bool") do { "bool" } else { "_" }
+              if (ek == "Bool") do { "bool" } else {
+                if (ek == "Char") do { "char" } else { "_" }
+              }
             }
           }
         }

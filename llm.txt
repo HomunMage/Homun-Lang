@@ -18,6 +18,7 @@ x := 10
 name := "hello"
 speed := 3.14
 active := true
+ch := 'a'                     // char (single quotes)
 nothing := none
 ```
 
@@ -168,7 +169,7 @@ to_lower(s)                    // lowercase
 contains(s, "sub")             // substring check
 find(s, "sub")                 // position or -1
 substr(s, start, end)          // substring
-char_at(s, idx)                // character at index
+char_at(s, idx)                // character at index (returns str)
 lines(s)                       // split by newline
 parse_int(s)                   // string → int
 parse_float(s)                 // string → float
@@ -248,7 +249,7 @@ d2 := dict_clone(d)
 ### `use chars` — Character Classification
 ```hom
 use chars
-is_alpha("a")                   // true
+is_alpha("a")                   // true (works with str or char)
 is_alnum("3")                   // true
 is_digit("7")                   // true
 is_ws(" ")                      // true
@@ -271,6 +272,7 @@ is_ws(" ")                      // true
 | `int` | `i32` | |
 | `float` | `f32` | |
 | `str` | `String` | |
+| `char` | `char` | single quotes: `'a'`, `'\n'` |
 | `bool` | `bool` | |
 | `none` | `Option::None` | |
 | `@[T]` | `Vec<T>` | |

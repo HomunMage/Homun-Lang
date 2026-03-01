@@ -28,6 +28,7 @@ pub fn expr_kind(e: Expr) -> String {
         Expr::Float(_) => "Float".to_string(),
         Expr::Bool(_) => "Bool".to_string(),
         Expr::Str(_) => "Str".to_string(),
+        Expr::Char(_) => "Char".to_string(),
         Expr::None => "None".to_string(),
         Expr::Var(_) => "Var".to_string(),
         Expr::Field(_, _) => "Field".to_string(),
@@ -626,6 +627,14 @@ pub fn expr_str_val(e: Expr) -> String {
     match e {
         Expr::Str(s) => s,
         _ => panic!("expr_str_val: not Str"),
+    }
+}
+
+/// Returns the char value from Expr::Char as a String (for .hom interop).
+pub fn expr_char_val(e: Expr) -> String {
+    match e {
+        Expr::Char(c) => c.to_string(),
+        _ => panic!("expr_char_val: not Char"),
     }
 }
 

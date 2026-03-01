@@ -101,6 +101,7 @@ pub fn codegen_type(ty: TypeExpr) -> String {
             "float" => "f32".to_string(),
             "bool" => "bool".to_string(),
             "str" => "String".to_string(),
+            "char" => "char".to_string(),
             "none" => "Option<_>".to_string(),
             _ => n,
         },
