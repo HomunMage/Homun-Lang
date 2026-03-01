@@ -231,16 +231,30 @@ impl Parser {
                     .collect();
                 return Ok(Stmt::BindPat(Pat::Tuple(pats), rhs));
             }
+            if self.check(&TokenKind::MutAssign) {
+                self.advance();
+                let rhs = self.parse_expr()?;
+                let pats = names
+                    .into_iter()
+                    .map(|n| if n == "_" { Pat::Wild } else { Pat::Var(n) })
+                    .collect();
+                return Ok(Stmt::BindPatMut(Pat::Tuple(pats), rhs));
+            }
             self.restore(saved);
             let e = self.parse_expr()?;
             return Ok(Stmt::Expression(e));
         }
 
-        // Single name bind: a := expr
+        // Single name bind: a := expr  or  a ::= expr
         if self.check(&TokenKind::Assign) {
             self.advance();
             let rhs = self.parse_expr()?;
             return Ok(Stmt::Bind(name, rhs));
+        }
+        if self.check(&TokenKind::MutAssign) {
+            self.advance();
+            let rhs = self.parse_expr()?;
+            return Ok(Stmt::BindMut(name, rhs));
         }
 
         // Lvalue assignment: expr[idx] := rhs  or  expr.field := rhs
