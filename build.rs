@@ -151,14 +151,27 @@ fn compile_hom_files() {
         let stem = path.file_stem().unwrap().to_string_lossy().to_string();
         let rs_path = out_dir.join(format!("{}.rs", stem));
 
-        // Only recompile if .hom is newer than .rs
-        let needs_compile = !rs_path.exists()
+        // Only recompile if .hom or its _imp.rs is newer than the generated .rs
+        let imp_path = PathBuf::from(format!("src/{}_imp.rs", stem));
+        let rs_mtime = std::fs::metadata(&rs_path)
+            .ok()
+            .and_then(|m| m.modified().ok());
+        let hom_newer = rs_mtime.is_none()
             || std::fs::metadata(&path)
-                .and_then(|hom| {
-                    std::fs::metadata(&rs_path)
-                        .map(|rs| hom.modified().unwrap() > rs.modified().unwrap())
-                })
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .map(|hom_mtime| hom_mtime > rs_mtime.unwrap())
                 .unwrap_or(true);
+        let imp_newer = imp_path.exists()
+            && std::fs::metadata(&imp_path)
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .map(|imp_mtime| rs_mtime.map(|rs| imp_mtime > rs).unwrap_or(true))
+                .unwrap_or(false);
+        let needs_compile = !rs_path.exists() || hom_newer || imp_newer;
+        if imp_path.exists() {
+            println!("cargo:rerun-if-changed={}", imp_path.display());
+        }
 
         if needs_compile {
             let status = Command::new(&homunc)

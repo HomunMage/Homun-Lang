@@ -675,7 +675,14 @@ impl Parser {
         match &t.kind {
             TokenKind::Ident(n) => {
                 let name = n.clone();
-                if self.consume(&TokenKind::Colon) {
+                if self.consume(&TokenKind::MutAssign) {
+                    let ty = self.parse_type_expr()?;
+                    Ok(Param {
+                        name,
+                        ty: Some(ty),
+                        mutable: true,
+                    })
+                } else if self.consume(&TokenKind::Colon) {
                     let ty = self.parse_type_expr()?;
                     Ok(Param {
                         name,
