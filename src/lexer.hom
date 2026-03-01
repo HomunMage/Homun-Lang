@@ -1,0 +1,121 @@
+// lexer.hom — Port of lexer.rs: tokenises Homun source into @[Token].
+//
+// Uses:
+//   lexer_imp — LexState + char-walking helpers + token constructors
+//
+// All inner loops (string parsing, block comment, char literal, number, ident)
+// are handled by Rust helpers in lexer_imp.rs to avoid the nested-while
+// counter-shadowing issue in Homun's codegen.
+//
+// ls_cur / ls_peek return String (1-char strings) so .hom code can compare
+// with string literals — the released homunc binary does not support char
+// literals ('x') in .hom source files.
+//
+// Public API:
+//   lex(source: str) -> Result<@[Token], str>
+
+// `use lexer_imp` sets has_rs_dep=true so homunc skips undefined-reference
+// checks for helper functions available at include!() time.
+use lexer_imp
+
+
+// ─── lex ─────────────────────────────────────────────────────────────────────
+// Tokenise the entire source string.
+// Returns Ok(@[Token]) on success or Err(str) on the first lexer error.
+
+lex := (source: str) -> Result<@[Token], str> {
+  state := make_lex_state(source)
+  tokens := tokens_new()
+
+  while (ls_should_continue(state)) do {
+    c   := ls_cur(state)
+    pos := ls_pos(state)
+
+    // ── Whitespace ──────────────────────────────────────────────────────────
+    if (is_whitespace(c)) do {
+      if (is_newline(c)) do {
+        state := ls_advance_newline(state)
+      } else {
+        state := ls_advance_col(state, 1)
+      }
+    } else {
+
+      // ── Line comment: // … ────────────────────────────────────────────────
+      if (c == "/" and ls_peek(state, 1) == "/") do {
+        state := ls_skip_line_comment(state)
+      } else {
+
+        // ── Block comment: /* … */ ───────────────────────────────────────────
+        if (c == "/" and ls_peek(state, 1) == "*") do {
+          state := ls_skip_block_comment(state)
+        } else {
+
+          // ── String literal: "…" ─────────────────────────────────────────────
+          if (c == "\"") do {
+            new_state, s := ls_read_string(state)
+            state := new_state
+            if (not ls_has_err(state)) do {
+              tokens := tokens_push(tokens, make_token_str(s, pos))
+            }
+          } else {
+
+            // ── Char literal: '…' ───────────────────────────────────────────
+            if (c == "'") do {
+              new_state, ch := ls_read_char_lit(state)
+              state := new_state
+              if (not ls_has_err(state)) do {
+                tokens := tokens_push(tokens, make_token_char(ch, pos))
+              }
+            } else {
+
+              // ── Number literal: digits ────────────────────────────────────
+              if (is_digit(c)) do {
+                new_state, tok := ls_read_number(state)
+                state := new_state
+                if (not ls_has_err(state)) do {
+                  tokens := tokens_push(tokens, tok)
+                }
+              } else {
+
+                // ── Identifier / keyword: alpha start ────────────────────────
+                if (is_alpha(c)) do {
+                  new_state, tok := ls_read_ident(state)
+                  state := new_state
+                  tokens := tokens_push(tokens, tok)
+                } else {
+
+                  // ── Multi-char operators (:=, ->, =>, ==, !=, <=, >=) ─────
+                  multi_kind, multi_n := ls_try_multi_op(state)
+                  if (multi_n > 0) do {
+                    tokens := tokens_push(tokens, make_token(multi_kind, pos))
+                    state  := ls_advance_col(state, multi_n)
+                  } else {
+
+                    // ── Single-char operators ─────────────────────────────────
+                    single_kind := ls_try_single_op(c)
+                    if (single_kind != "") do {
+                      tokens := tokens_push(tokens, make_token(single_kind, pos))
+                      state  := ls_advance_col(state, 1)
+                    } else {
+                      err_line := ls_line(state)
+                      err_col  := ls_col(state)
+                      state := ls_set_err(state, "Unexpected character '${c}' at line ${err_line}, col ${err_col}")
+                    }
+
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (ls_has_err(state)) do {
+    Err(ls_get_err(state))
+  } else {
+    tokens := tokens_push(tokens, make_token("Eof", ls_pos(state)))
+    Ok(tokens)
+  }
+}
