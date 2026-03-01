@@ -86,7 +86,22 @@ pub mod resolver_hom {
     include!(concat!(env!("OUT_DIR"), "/resolver.rs"));
 }
 
+// ── main_hom — CLI entry point compiled from main.hom ────────────────────────
+#[allow(clippy::println_empty_string)]
+pub mod main_hom {
+    use crate::dep::*;
+    use crate::runtime::*;
+    use crate::{builtin_rs, codegen_hom, embedded_rs, lexer_hom, parser, resolver_hom, sema_hom};
+    include!(concat!(env!("OUT_DIR"), "/main.rs"));
+}
+
 // ── Embedded runtime library content ─────────────────────────────────────────
+// builtin_rs() is used by main_hom::preamble() to get the builtin.rs content.
+// include_str! resolves relative to this file (src/lib.rs → src/hom/builtin.rs).
+pub fn builtin_rs() -> &'static str {
+    include_str!("hom/builtin.rs")
+}
+
 // resolver.rs calls embedded_rs() from the crate root, so it must be pub here.
 pub fn embedded_rs(name: &str) -> Option<String> {
     match name {
