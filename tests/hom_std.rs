@@ -1,5 +1,5 @@
 /// Integration tests for hom-std runtime libraries (re, heap, chars).
-/// Compiles and runs the test_*.hom files from runtime/.
+/// Compiles and runs the test_*.hom files from _site/examples/.
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -56,18 +56,18 @@ fn compile_and_run(hom_path: &Path) -> String {
 #[test]
 #[ignore] // requires `regex` crate — cannot compile with standalone rustc
 fn test_hom_std_re() {
-    let out = compile_and_run(Path::new("runtime/test_re.hom"));
+    let out = compile_and_run(Path::new("_site/examples/test_re.hom"));
     assert!(!out.is_empty(), "test_re should produce output");
 }
 
 #[test]
 fn test_hom_std_heap() {
-    let out = compile_and_run(Path::new("runtime/test_heap.hom"));
+    let out = compile_and_run(Path::new("_site/examples/test_heap.hom"));
     assert!(!out.is_empty(), "test_heap should produce output");
 }
 
 #[test]
 fn test_hom_std_chars() {
-    let out = compile_and_run(Path::new("runtime/test_chars.hom"));
+    let out = compile_and_run(Path::new("_site/examples/test_chars.hom"));
     assert!(!out.is_empty(), "test_chars should produce output");
 }
