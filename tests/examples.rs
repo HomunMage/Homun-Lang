@@ -100,3 +100,28 @@ fn test_example_two_sum() {
     let out = compile_and_run(Path::new("_site/examples/two_sum.hom"));
     assert!(out.contains("Two Sum:"));
 }
+
+#[test]
+fn test_example_mut_bind() {
+    let out = compile_and_run(Path::new("_site/examples/mut_bind.hom"));
+    assert!(
+        out.contains("5"),
+        "counter_test should print 5, got: {}",
+        out
+    );
+    assert!(
+        out.contains("a=20, b=10"),
+        "swap_test should print a=20, b=10, got: {}",
+        out
+    );
+}
+
+#[test]
+fn test_example_mut_param() {
+    let out = compile_and_run(Path::new("_site/examples/mut_param.hom"));
+    assert!(
+        out.contains("7"),
+        "mut_param should print 7 (0+1+1+5), got: {}",
+        out
+    );
+}

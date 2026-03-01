@@ -1,0 +1,21 @@
+// examples/mut_param.hom
+// Tests ::= mutable reference params (emits &mut T in fn signature)
+use std
+
+Counter := struct { value: int }
+
+increment := (c ::= Counter) -> _ {
+  c.value := c.value + 1
+}
+
+add_n := (c ::= Counter, n: int) -> _ {
+  c.value := c.value + n
+}
+
+main := () -> _ {
+  c ::= Counter { value: 0 }
+  increment(c)
+  increment(c)
+  add_n(c, 5)
+  print("{}", c.value)
+}

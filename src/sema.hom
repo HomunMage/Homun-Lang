@@ -84,11 +84,15 @@ stmts_bound := (env: Scope, stmts: @[Stmt]) -> Scope {
   while (i < n) do {
     s := stmts[i]
     k := stmt_kind(s)
-    if (k == "Bind" or k == "StructDef" or k == "EnumDef") do {
+    if (k == "Bind" or k == "BindMut" or k == "StructDef" or k == "EnumDef") do {
       scope_insert(result, stmt_bind_name(s))
     }
-    if (k == "BindPat") do {
-      names := pat_names(stmt_bindpat_pat(s))
+    if (k == "BindPat" or k == "BindPatMut") do {
+      names := if (k == "BindPat") do {
+        pat_names(stmt_bindpat_pat(s))
+      } else {
+        pat_names(stmt_bindpat_mut_pat(s))
+      }
       j := 0
       while (j < len(names)) do {
         scope_insert(result, names[j])
@@ -114,11 +118,15 @@ check_stmts := (env: Scope, stmts: @[Stmt]) -> @[str] {
     s := stmts[i]
     errs := errs_join(errs, check_stmt(local_env, s))
     k := stmt_kind(s)
-    if (k == "Bind" or k == "StructDef" or k == "EnumDef") do {
+    if (k == "Bind" or k == "BindMut" or k == "StructDef" or k == "EnumDef") do {
       scope_insert(local_env, stmt_bind_name(s))
     }
-    if (k == "BindPat") do {
-      names := pat_names(stmt_bindpat_pat(s))
+    if (k == "BindPat" or k == "BindPatMut") do {
+      names := if (k == "BindPat") do {
+        pat_names(stmt_bindpat_pat(s))
+      } else {
+        pat_names(stmt_bindpat_mut_pat(s))
+      }
       j := 0
       while (j < len(names)) do {
         scope_insert(local_env, names[j])
@@ -138,8 +146,10 @@ check_stmt := (env: Scope, stmt: Stmt) -> @[str] {
   k := stmt_kind(stmt)
   match k {
     "Bind" => check_expr(env, stmt_bind_expr(stmt))
+    "BindMut" => check_expr(env, stmt_bind_mut_expr(stmt))
     "Expression" => check_expr(env, stmt_expression_expr(stmt))
     "BindPat" => check_expr(env, stmt_bindpat_expr(stmt))
+    "BindPatMut" => check_expr(env, stmt_bindpat_mut_expr(stmt))
     "Assign" => errs_join(check_expr(env, stmt_assign_lhs(stmt)), check_expr(env, stmt_assign_rhs(stmt)))
     _ => errs_empty()
   }
@@ -373,7 +383,7 @@ run_sema := (prog: @[Stmt], imported_list: @[str], skip_undef: bool) -> @[str] {
   while (pi < pn) do {
     s := prog[pi]
     k := stmt_kind(s)
-    if (k == "Bind" or k == "StructDef" or k == "EnumDef") do {
+    if (k == "Bind" or k == "BindMut" or k == "StructDef" or k == "EnumDef") do {
       scope_insert(top_names, stmt_bind_name(s))
     }
     pi := pi + 1

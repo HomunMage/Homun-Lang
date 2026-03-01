@@ -84,10 +84,11 @@ pub enum TokenKind {
     As,
     Rec,
     // Operators
-    Assign,   // :=
-    Arrow,    // ->
-    FatArrow, // =>
-    Pipe,     // |
+    MutAssign, // ::=
+    Assign,    // :=
+    Arrow,     // ->
+    FatArrow,  // =>
+    Pipe,      // |
     Dot,
     Plus,
     Minus,
@@ -237,6 +238,7 @@ pub fn make_token(kind: String, pos: Pos) -> Token {
         "As" => TokenKind::As,
         "Rec" => TokenKind::Rec,
         // Operators
+        "MutAssign" => TokenKind::MutAssign,
         "Assign" => TokenKind::Assign,
         "Arrow" => TokenKind::Arrow,
         "FatArrow" => TokenKind::FatArrow,
@@ -635,6 +637,10 @@ pub fn ls_try_multi_op(s: LexState) -> (String, i64) {
     let i = s.i as usize;
     let c = s.chars.get(i).copied().unwrap_or('\0');
     let c1 = s.chars.get(i + 1).copied().unwrap_or('\0');
+    let c2 = s.chars.get(i + 2).copied().unwrap_or('\0');
+    if (c, c1, c2) == (':', ':', '=') {
+        return ("MutAssign".to_string(), 3);
+    }
     match (c, c1) {
         (':', '=') => ("Assign".to_string(), 2),
         ('-', '>') => ("Arrow".to_string(), 2),

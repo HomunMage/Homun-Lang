@@ -11,7 +11,9 @@ pub type Program = Vec<Stmt>;
 #[derive(Debug, Clone)]
 pub enum Stmt {
     Bind(Name, Expr),
+    BindMut(Name, Expr),
     BindPat(Pat, Expr),
+    BindPatMut(Pat, Expr),
     /// Lvalue assignment: `expr[idx] := rhs` or `expr.field := rhs`
     Assign(Expr, Expr),
     Use(Vec<Name>),
@@ -191,4 +193,5 @@ pub enum UnOp {
 pub struct Param {
     pub name: Name,
     pub ty: Option<TypeExpr>,
+    pub mutable: bool,
 }

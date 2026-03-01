@@ -148,8 +148,19 @@ cg_general_call := (i: int, sc: Scope, f: Expr, args: @[Expr]) -> str {
   n := len(args)
   arg_strs := @[]
   ai := 0
+  fn_name := if (expr_kind(f) == "Var") do { expr_var_name(f) } else { "" }
   while (ai < n) do {
-    push(arg_strs, cg_clone_arg(i, sc, args[ai]))
+    arg_s := if (fn_name != "" and is_param_mutable_in_call(fn_name, ai)) do {
+      ak := expr_kind(args[ai])
+      if (ak == "Var") do {
+        "&mut " + expr_var_name(args[ai])
+      } else {
+        "&mut (" + cg_expr(i, sc, args[ai]) + ")"
+      }
+    } else {
+      cg_clone_arg(i, sc, args[ai])
+    }
+    push(arg_strs, arg_s)
     ai := ai + 1
   }
   cg_expr(i, sc, f) + "(" + join(arg_strs, ", ") + ")"
@@ -673,9 +684,94 @@ cg_stmt := (i: int, sc: Scope, stmt: Stmt) -> str {
         }
       }
     }
+    "BindMut" => {
+      name := stmt_bind_mut_name(stmt)
+      e := stmt_bind_mut_expr(stmt)
+      if (expr_kind(e) == "Lambda") do {
+        // Inline lambda: let name = |params| { body };
+        params := expr_lambda_params(e)
+        lam_stmts := expr_lambda_stmts(e)
+        fe2 := expr_lambda_final(e)
+        pn := len(params)
+        param_parts := @[]
+        pk := 0
+        while (pk < pn) do {
+          push(param_parts, codegen_param(params[pk]))
+          pk := pk + 1
+        }
+        param_str := join(param_parts, ", ")
+        inner_sc := scope_clone(sc)
+        pi := 0
+        while (pi < pn) do {
+          scope_insert(inner_sc, param_name(params[pi]))
+          pi := pi + 1
+        }
+        body_lines := cg_body(i + 1, inner_sc, lam_stmts, fe2)
+        scope_insert(sc, name)
+        ind(i) + "let " + name + " = |" + param_str + "| {\n" + join(body_lines, "\n") + "\n" + ind(i) + "};"
+      } else {
+        // Non-lambda bind
+        rhs := if (expr_kind(e) == "Var" and scope_contains(sc, expr_var_name(e))) do {
+          expr_var_name(e) + ".clone()"
+        } else {
+          if (expr_kind(e) == "Field") do {
+            cg_expr(i, sc, e) + ".clone()"
+          } else {
+            if (expr_kind(e) == "Str" and scope_contains(sc, name)) do {
+              codegen_string(expr_str_val(e)) + ".to_string()"
+            } else {
+              cg_expr(i, sc, e)
+            }
+          }
+        }
+        if (scope_contains(sc, name)) do {
+          "${ind(i)}${name} = ${rhs};"
+        } else {
+          scope_insert(sc, name)
+          ind(i) + "let mut " + name + " = " + rhs + ";"
+        }
+      }
+    }
     "BindPat" => {
       pat := stmt_bindpat_pat(stmt)
       e := stmt_bindpat_expr(stmt)
+      rhs := cg_expr(i, sc, e)
+      pk := pat_kind(pat)
+      bind_str := if (pk == "Tuple") do {
+        sub_pats := pat_tuple_pats(pat)
+        sn := len(sub_pats)
+        parts := @[]
+        si := 0
+        while (si < sn) do {
+          sp := sub_pats[si]
+          spk := pat_kind(sp)
+          part := if (spk == "Var") do {
+            "mut " + pat_var_name(sp)
+          } else {
+            if (spk == "Wild") do { "_" } else { cg_pat(sp) }
+          }
+          push(parts, part)
+          si := si + 1
+        }
+        join(parts, ", ")
+      } else {
+        if (pk == "Var") do {
+          "mut " + pat_var_name(pat)
+        } else {
+          cg_pat(pat)
+        }
+      }
+      names := pat_names_list(pat)
+      ni := 0
+      while (ni < len(names)) do {
+        scope_insert(sc, names[ni])
+        ni := ni + 1
+      }
+      ind(i) + "let (" + bind_str + ") = " + rhs + ";"
+    }
+    "BindPatMut" => {
+      pat := stmt_bindpat_mut_pat(stmt)
+      e := stmt_bindpat_mut_expr(stmt)
       rhs := cg_expr(i, sc, e)
       pk := pat_kind(pat)
       bind_str := if (pk == "Tuple") do {
@@ -784,6 +880,7 @@ cg_top_fn := (i: int, name: str, params: @[Param], ret_ty: Option<TypeExpr>, voi
   }
   scope0 := scope_from_list(param_names)
   param_str := codegen_params_mut(params)
+  register_fn_sig(name, params)
   generics := infer_generics(params)
   gen_str := generics_str(generics)
   ret_str := match void_mark {
@@ -881,6 +978,31 @@ codegen_top_level_stmt := (i: int, stmt: Stmt, rs_content: RsContent) -> str {
         "pub const " + to_upper(name) + ": " + ty_str + " = " + cg_expr(0, scope_new(), e) + ";"
       }
     }
+    "BindMut" => {
+      name := stmt_bind_mut_name(stmt)
+      e := stmt_bind_mut_expr(stmt)
+      if (expr_kind(e) == "Lambda") do {
+        params := expr_lambda_params(e)
+        ret_ty := expr_lambda_ret_ty(e)
+        void_mark := expr_lambda_void_mark(e)
+        lam_stmts := expr_lambda_stmts(e)
+        fe2 := expr_lambda_final(e)
+        cg_top_fn(i, name, params, ret_ty, void_mark, lam_stmts, fe2)
+      } else {
+        ek := expr_kind(e)
+        ty_str := if (ek == "Str") do { "&str" } else {
+          if (ek == "Int") do { "i32" } else {
+            if (ek == "Float") do { "f32" } else {
+              if (ek == "Bool") do { "bool" } else {
+                if (ek == "Char") do { "char" } else { "_" }
+              }
+            }
+          }
+        }
+        "pub const " + to_upper(name) + ": " + ty_str + " = " + cg_expr(0, scope_new(), e) + ";"
+      }
+    }
+    "BindPatMut" => ""
     "BindPat" => ""
     "Assign" => ""
     "Expression" => cg_expr(0, scope_new(), stmt_expression_expr(stmt)) + ";"

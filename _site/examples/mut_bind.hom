@@ -1,0 +1,25 @@
+// examples/mut_bind.hom
+// Tests ::= mutable bind operator (Phase 1: same behavior as :=, emits let mut)
+use std
+
+counter_test := () -> _ {
+  x ::= 0
+  x ::= x + 1
+  x ::= x + 1
+  x ::= x + 3
+  print("{}", x)
+}
+
+swap_test := () -> _ {
+  a ::= 10
+  b ::= 20
+  tmp ::= a
+  a ::= b
+  b ::= tmp
+  print("a={}, b={}", a, b)
+}
+
+main := () -> _ {
+  counter_test()
+  swap_test()
+}

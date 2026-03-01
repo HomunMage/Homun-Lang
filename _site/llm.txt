@@ -12,14 +12,17 @@ rustc main.rs -o main          # compile .rs → binary
 
 ## Syntax Cheat Sheet
 
-### Variables (always `:=`, no let/var/const)
+### Variables (`:=` immutable, `::=` mutable)
 ```hom
-x := 10
+x := 10                       // immutable (let)
 name := "hello"
 speed := 3.14
 active := true
 ch := 'a'                     // char (single quotes)
 nothing := none
+
+counter ::= 0                 // mutable (let mut)
+counter ::= counter + 1       // reassignment (same name in scope)
 ```
 
 ### String Interpolation
@@ -40,6 +43,11 @@ add := (a, b) -> { a + b }                    // inferred types
 add_typed := (a: int, b: int) -> int { a + b } // explicit types
 log := (msg) -> _ { print(msg) }               // void (-> _)
 greet := () -> str { "hello" }                  // no args
+
+// Mutable reference params with ::=
+increment := (c ::= Counter) -> _ { c.value := c.value + 1 }
+// compiles to: fn increment(c: &mut Counter) { ... }
+// call sites auto-pass &mut: increment(c)
 ```
 
 ### Control Flow
@@ -58,8 +66,9 @@ result := match dir {
 for i in range(10) do { print(i) }
 for item in list do { process(item) }
 
-// while loop
-while (count > 0) do { count := count - 1 }
+// while loop (use ::= for mutable counter)
+count ::= 10
+while (count > 0) do { count ::= count - 1 }
 
 // early return from loop
 break => value
@@ -79,6 +88,12 @@ result := @[1, 2, 3, 4, 5]
 Point := struct { x: int, y: int }
 p := Point { x: 10, y: 20 }
 p.x := 15                      // field mutation
+
+// For in-place mutation via functions, use ::= for both binding and params:
+Counter := struct { value: int }
+c ::= Counter { value: 0 }
+increment := (c ::= Counter) -> _ { c.value := c.value + 1 }
+increment(c)                   // c.value is now 1 (mutated in place)
 ```
 
 ### Enums
@@ -95,9 +110,11 @@ match shape {
 
 ### Destructuring
 ```hom
-a, b := b, a                   // swap
+a, b := b, a                   // swap (immutable rebind)
 x, y := get_coords(node)       // unpack tuple return
 _, second := get_pair()         // discard first
+
+a, b ::= b, a                  // swap (mutable rebind)
 ```
 
 ### Imports
@@ -259,6 +276,8 @@ is_ws(" ")                      // true
 
 - Variables and functions: any naming style (no enforcement)
 - Types: `PascalCase` (convention)
+- Use `:=` for values that don't change, `::=` for values that will be reassigned
+- Use `::=` in function params when the function needs to mutate the argument
 - No methods — use free functions: `set(canvas, x, y, ch)` not `canvas.set(x, y, ch)`
 - No classes — structs for data, functions for behavior
 - Pipe `|` for chaining instead of method chains

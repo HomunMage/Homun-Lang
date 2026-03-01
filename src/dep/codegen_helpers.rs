@@ -141,7 +141,8 @@ pub fn codegen_param(p: Param) -> String {
     }
 }
 
-/// Render a parameter list with `mut` prefix for top-level function signatures.
+/// Render a parameter list with mut/mutable prefix for top-level function signatures.
+/// Mutable params (::=) emit name: &mut Type. Regular params emit mut name: Type.
 /// Untyped parameters get generic type letters T, U, V, ...
 pub fn codegen_params_mut(params: Vec<Param>) -> String {
     let generics = ["T", "U", "V", "W", "X", "Y", "Z"];
@@ -150,6 +151,14 @@ pub fn codegen_params_mut(params: Vec<Param>) -> String {
     for p in params {
         if p.name == "_" {
             parts.push("_: _".to_string());
+        } else if p.mutable {
+            if let Some(ty) = p.ty {
+                parts.push(format!("{}: &mut {}", p.name, codegen_type(ty)));
+            } else {
+                let g = generics[gen_idx];
+                gen_idx += 1;
+                parts.push(format!("{}: &mut {}", p.name, g));
+            }
         } else if let Some(ty) = p.ty {
             parts.push(format!("mut {}: {}", p.name, codegen_type(ty)));
         } else {
@@ -160,6 +169,7 @@ pub fn codegen_params_mut(params: Vec<Param>) -> String {
     }
     parts.join(", ")
 }
+
 
 /// Infer the list of generic type parameters (`T: Clone`, `U: Clone`, ...) needed
 /// for a function based on how many parameters lack explicit type annotations.
@@ -174,6 +184,34 @@ pub fn infer_generics(params: Vec<Param>) -> Vec<String> {
         .map(|g| format!("{}: Clone", g))
         .collect()
 }
+// --- Function signature registry for ::= mutable reference params ---
+
+use std::cell::RefCell;
+use std::collections::HashMap;
+
+thread_local! {
+    static FN_MUT_PARAMS: RefCell<HashMap<String, Vec<bool>>> =
+        RefCell::new(HashMap::new());
+}
+
+/// Register a function name with its mutable-flag list.
+/// Called from cg_top_fn when emitting a top-level function definition.
+pub fn register_fn_sig(name: String, params: Vec<Param>) {
+    let flags: Vec<bool> = params.iter().map(|p| p.mutable).collect();
+    FN_MUT_PARAMS.with(|m| m.borrow_mut().insert(name, flags));
+}
+
+/// Returns true if the arg at index arg_idx of function fn_name is a mutable ref param.
+/// Returns false if the function is unknown or the index is out of range.
+pub fn is_param_mutable_in_call(fn_name: String, arg_idx: i32) -> bool {
+    FN_MUT_PARAMS.with(|m| {
+        m.borrow()
+            .get(&fn_name)
+            .and_then(|flags| flags.get(arg_idx as usize).copied())
+            .unwrap_or(false)
+    })
+}
+
 
 // ─── Expression predicates ───────────────────────────────────────────────────
 

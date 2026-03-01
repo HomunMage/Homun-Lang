@@ -6,6 +6,14 @@ Branches: `history` (spec drafts), `haskell` (Haskell compiler), `rust` (Rust re
 
 ---
 
+### v0.63 Mutable Assign Operator
+
+Added MutAssign operator ::= to Homun
+Mutable params emit ref-mut T sig, call sites emit ref-mut arg
+build.rs detects imp.rs changes, re-triggers hom recompilation
+
+---
+
 ### v0.62 — Full Self-Hosting (Lexer, Resolver, Main)
 
 - Ported lexer to Homun: `src/lexer.hom` + `src/lexer_imp.rs` (LexState helpers, token constructors, char-testing)

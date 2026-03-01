@@ -77,11 +77,15 @@ fizz_buzz := (n: int) -> @[str] {
 use std                                // standard library
 use engine::physics::{Vec2, RigidBody} // Rust pass-through
 
-// Variables — := for all bindings, no let/var/const/mut
-x      := 10
+// Variables — := immutable, ::= mutable (no let/var/const)
+x      := 10              // immutable (Rust: let)
 name   := "hero"
 speed  := float(3.14)
 hp     := int(100)         // explicit type via constructor
+
+// Mutable variables — ::= emits let mut, allows reassignment
+counter ::= 0
+counter ::= counter + 1    // reassignment (Rust: counter = counter + 1)
 
 // String interpolation — any expression inside ${}
 greeting := "Hello, ${name}! HP: ${hp * 2}"
@@ -103,11 +107,12 @@ greeting := "Hello, ${name}! HP: ${hp * 2}"
 
 ## Operators
 
-No bare `=` exists. `:=` binds, `==` compares. No ambiguity.
+No bare `=` exists. `:=` and `::=` bind, `==` compares. No ambiguity.
 
 | Operator | Meaning |
 |---|---|
-| `:=` | Bind / rebind |
+| `:=` | Bind / rebind (immutable — Rust `let`) |
+| `::=` | Bind / rebind (mutable — Rust `let mut`) |
 | `==`, `!=`, `<`, `>`, `<=`, `>=` | Comparison |
 | `and`, `or`, `not` | Boolean (Python-style) |
 | `in` | Membership (lists, sets, dict keys). Negate: `not x in s` |
@@ -145,6 +150,11 @@ add       := (a, b) -> { a + b }                     // inferred from usage
 add_typed := (a: int, b: int) -> int { a + b }      // explicit (optional)
 log_event := (msg) -> _ { print(msg) }               // void (-> _)
 tick      := () -> _ { update() }                    // no args
+
+// Mutable reference params — ::= in param position
+increment := (c ::= Counter) -> _ { c.value := c.value + 1 }
+// compiles to: fn increment(c: &mut Counter) { c.value = c.value + 1; }
+// call sites auto-pass &mut: increment(my_counter)
 ```
 
 Return type goes between `->` and `{`: `-> {` inferred, `-> Type {` explicit, `-> _ {` void.
@@ -293,7 +303,9 @@ match find_target(pos) {
 ```
 for i in range(10) do { print(i) }
 for item in inventory do { use(item) }
-while (enemies > 0) do { attack_nearest() }
+
+enemies ::= 10
+while (enemies > 0) do { enemies ::= enemies - 1 }
 ```
 
 `break` exits loop. `continue` skips iteration. Both work inside `match` blocks.
@@ -320,12 +332,14 @@ two_sum := (nums: @[], target) -> @[] {
 
 ## Destructuring
 
-Multiple bindings on left side of `:=`. Right side fully evaluated first.
+Multiple bindings on left side of `:=` or `::=`. Right side fully evaluated first.
 
 ```
-a, b    := b, a              // swap
+a, b    := b, a              // swap (immutable)
 _, b    := get_pair()        // discard first
 x, y    := y, x + y          // Fibonacci step
+
+a, b    ::= b, a             // swap (mutable — lets you reassign a, b later)
 
 { name, hp, _ } := player    // struct destructure, skip speed
 { x, _, z } := pos           // skip y
@@ -355,6 +369,12 @@ p := Player { name: "Aria", hp: 100, speed: 3.5 }
 p.hp := p.hp - 10           // field mutation
 
 pos := { x: 1.0, y: 2.0 }  // anonymous struct
+
+// For in-place mutation via functions, use ::= :
+Counter := struct { value: int }
+c ::= Counter { value: 0 }           // mutable binding
+add_n := (c ::= Counter, n: int) -> _ { c.value := c.value + n }
+add_n(c, 5)                           // c.value is now 5
 ```
 
 **Data structs** (no lambda fields) are auto-serializable to RON. **Behavior structs** (has lambda
