@@ -1,0 +1,151 @@
+// main.hom — CLI entry point: argument parsing and compilation dispatch.
+//
+// Ports main.rs logic to .hom using:
+//   src/main_imp.rs — I/O helpers, compile_source_fn, compile_file_fn,
+//                     result_ok_or_exit, print_str, eprint_str, homunc_version
+//
+// Public API (main() is the binary entry point):
+//   main() — parse CLI args, dispatch to compile helpers
+
+// `use main_imp` sets has_rs_dep=true so homunc skips undefined-reference
+// checks for dep/ and runtime functions available at include!() time.
+use main_imp
+
+
+// ─── has_flag ─────────────────────────────────────────────────────────────────
+// Return true if the args list contains the given flag string.
+
+has_flag := (args: @[str], flag: str) -> bool {
+  n := len(args)
+  i := 0
+  found := false
+  while (i < n) do {
+    if (args[i] == flag) do { found := true }
+    i := i + 1
+  }
+  found
+}
+
+
+// ─── filter_flags ─────────────────────────────────────────────────────────────
+// Return a new list with all occurrences of f1 and f2 removed.
+
+filter_flags := (args: @[str], f1: str, f2: str) -> @[str] {
+  n := len(args)
+  result := @[]
+  i := 0
+  while (i < n) do {
+    if (args[i] != f1 and args[i] != f2) do {
+      push(result, args[i])
+    }
+    i := i + 1
+  }
+  result
+}
+
+
+// ─── print_help ───────────────────────────────────────────────────────────────
+
+print_help := () -> _ {
+  ver := homunc_version()
+  print("homunc ${ver} — Homun to Rust compiler")
+  print("")
+  print("USAGE:")
+  print("  homunc <input.hom>            Compile and print Rust to stdout")
+  print("  homunc <input.hom> -o out.rs  Compile and write to file")
+  print("  homunc -v, --version          Show version")
+  print("  homunc -h, --help             Show this message")
+  print("")
+  print("PIPELINE:")
+  print("  .hom source  ->  Lexer  ->  Parser  ->  Sema  ->  Codegen  ->  .rs")
+  print("")
+  print("LANGUAGE FEATURES SUPPORTED:")
+  print("  * Variable bindings      x := 10")
+  print("  * Lambdas                fn := (a, b) -> { a + b }")
+  print("  * Typed params           fn := (a: int, b: int) -> int { a + b }")
+  print("  * Recursion              fib := (n) -> { if ... { fib(n-1) + fib(n-2) } }")
+  print("  * Pipe operator          list | filter(f) | map(g)")
+  print("  * Collections            @[], @{}, @()")
+  print("  * Pattern match          match x { ... }")
+  print("  * if/else, for, while")
+  print("  * break => value         for ... do { break => val }")
+  print("  * Structs & Enums")
+  print("  * String interpolation   Hello ${ver}")
+  print("  * RON load/save")
+}
+
+
+// ─── compile_from_stdin ───────────────────────────────────────────────────────
+// Read Homun source from stdin and print compiled Rust to stdout.
+
+compile_from_stdin := (raw: bool) -> _ {
+  src := read_stdin()
+  result := compile_source_fn(src, raw)
+  out := result_ok_or_exit(result)
+  print_str(out)
+}
+
+
+// ─── compile_to_stdout ────────────────────────────────────────────────────────
+// Compile a .hom file and print the resulting Rust to stdout.
+
+compile_to_stdout := (path: str, raw: bool, module: bool) -> _ {
+  result := compile_file_fn(path, raw, module)
+  out := result_ok_or_exit(result)
+  print_str(out)
+}
+
+
+// ─── compile_to_file ─────────────────────────────────────────────────────────
+// Compile a .hom file and write the resulting Rust to an output file.
+
+compile_to_file := (src: str, out: str, raw: bool, module: bool) -> _ {
+  result := compile_file_fn(src, raw, module)
+  code := result_ok_or_exit(result)
+  write_file(out, code)
+  print("Compiled ${src} -> ${out}")
+}
+
+
+// ─── main ─────────────────────────────────────────────────────────────────────
+// Parse CLI arguments and dispatch to the appropriate compile function.
+
+main := () -> _ {
+  args := get_args()
+  raw := has_flag(args, "--raw")
+  module := has_flag(args, "--module")
+  raw_final := raw or module
+  filtered := filter_flags(args, "--raw", "--module")
+  n := len(filtered)
+  if (n == 0) do {
+    compile_from_stdin(raw_final)
+  } else {
+    first := filtered[0]
+    if (first == "--help" or first == "-h") do {
+      print_help()
+    } else {
+      if (first == "--version" or first == "-v") do {
+        ver := homunc_version()
+        print("homunc ${ver} — Homun to Rust compiler")
+      } else {
+        if (n == 1) do {
+          compile_to_stdout(first, raw_final, module)
+        } else {
+          if (n == 3) do {
+            second := filtered[1]
+            third := filtered[2]
+            if (second == "-o") do {
+              compile_to_file(first, third, raw_final, module)
+            } else {
+              eprint_str("Usage: homunc [--raw|--module] [input.hom] [-o output.rs]")
+              exit_process(1)
+            }
+          } else {
+            eprint_str("Usage: homunc [--raw|--module] [input.hom] [-o output.rs]")
+            exit_process(1)
+          }
+        }
+      }
+    }
+  }
+}

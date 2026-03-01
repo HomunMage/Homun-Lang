@@ -54,3 +54,79 @@ pub fn preamble() -> String {
         include_str!("hom/builtin.rs")
     )
 }
+
+/// Print a string to stdout without a trailing newline.
+pub fn print_str(s: String) {
+    print!("{}", s);
+}
+
+/// Print a string to stderr with a trailing newline.
+pub fn eprint_str(s: String) {
+    eprintln!("{}", s);
+}
+
+/// Return the compiler version string (set at build time via HOMUN_VERSION env).
+pub fn homunc_version() -> String {
+    env!("HOMUN_VERSION").to_string()
+}
+
+/// Extract the Ok value from a Result<String, String>.
+/// On Err, prints the error to stderr and exits with code 1.
+pub fn result_ok_or_exit(result: Result<String, String>) -> String {
+    match result {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Compile Homun source text (from a string), returning Rust code or an error message.
+/// Equivalent to compile_source() in main.rs.
+pub fn compile_source_fn(source: String, raw: bool) -> Result<String, String> {
+    let tokens =
+        homunc::lexer_hom::lex(source).map_err(|e| format!("Lex error: {}", e))?;
+    let ast =
+        homunc::parser::parse(tokens).map_err(|e| format!("Parse error: {}", e))?;
+    let sema_errs =
+        homunc::sema_hom::sema_analyze_skip_undef(ast.clone(), Vec::new());
+    if !sema_errs.is_empty() {
+        return Err(format!("Semantic errors:\n{}", sema_errs.join("\n")));
+    }
+    let mut rs_content = std::collections::HashMap::<String, String>::new();
+    for stmt in &ast {
+        if let homunc::ast::Stmt::Use(path) = stmt {
+            if path.len() == 1 {
+                if let Some(content) = homunc::embedded_rs(&path[0]) {
+                    rs_content.insert(path[0].clone(), content);
+                }
+            }
+        }
+    }
+    let code = homunc::codegen_hom::codegen_program_with_resolved(
+        ast,
+        Default::default(),
+        rs_content,
+    );
+    let prefix = if raw { String::new() } else { preamble() };
+    Ok(format!("{}{}", prefix, code))
+}
+
+/// Compile a .hom file with full multi-file resolution, returning Rust code or an error.
+/// Equivalent to compile_file() in main.rs.
+pub fn compile_file_fn(path: String, raw: bool, module: bool) -> Result<String, String> {
+    let resolved = if module {
+        homunc::resolver_hom::resolve_module(path.clone())?
+    } else {
+        homunc::resolver_hom::resolve(path.clone())?
+    };
+    let mut output = if raw { String::new() } else { preamble() };
+    for (i, file) in resolved.files.iter().enumerate() {
+        output.push_str(&file.rust_code);
+        if i + 1 < resolved.files.len() {
+            output.push('\n');
+        }
+    }
+    Ok(output)
+}
