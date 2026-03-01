@@ -19,6 +19,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 /// A single compiled file's output plus its exported names.
+#[derive(Clone)]
 pub struct ResolvedFile {
     pub path: PathBuf,
     pub rust_code: String,
@@ -26,6 +27,7 @@ pub struct ResolvedFile {
 }
 
 /// Result of resolving an entire dependency graph.
+#[derive(Clone)]
 pub struct ResolvedProgram {
     /// Compiled fragments in topological order (leaves first).
     pub files: Vec<ResolvedFile>,
