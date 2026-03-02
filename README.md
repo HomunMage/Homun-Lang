@@ -515,3 +515,100 @@ empty := @[]              // ❌ compile error, never used
 
 
 ```
+
+---
+
+## ECS Design with Homun
+
+Homun achieves ECS patterns without traits, generics, derive, or impl blocks — features that Rust requires but a scripting layer does not.
+
+### The Problem
+
+Rust ECS frameworks (Bevy, hecs, legion) rely on five language features:
+
+| Rust Feature | ECS Purpose |
+|---|---|
+| `&mut` borrowing | Mutate components in-place |
+| `trait` | Mark types as `Component`, `System`, `Resource` |
+| `impl` blocks | Attach methods to structs |
+| Generics `<T>` | Type-safe queries `Query<(&Pos, &mut Vel)>` |
+| `#[derive(...)]` | Auto-generate trait implementations |
+
+### How Homun Covers All Five
+
+**1. Borrowing — `::=` operator (v0.63)**
+
+```
+// ::= gives &mut semantics, := keeps clone
+move := (pos ::= Position, vel: Velocity, dt: float) -> _ {
+  pos.x := pos.x + vel.dx * dt    // mutates in place
+}
+```
+
+**2. Traits — struct declaration IS the trait**
+
+A struct with specific fields acts as a contract. Any function that accepts it requires those fields to exist — duck typing enforced by `rustc`.
+
+```
+// This struct definition IS the "Movable trait"
+Movable := struct { x: float, y: float, move: (float) -> _ }
+
+// Any struct matching the shape works
+Player := struct { x: float, y: float, move: (float) -> _, hp: int }
+```
+
+**3. Impl blocks — lambda fields in structs**
+
+No need for `impl Foo for Bar`. Put the function directly in the struct.
+
+```
+p := Player {
+  x: 0.0, y: 0.0,
+  move: (dt) -> _ { print("moving ${dt}") },
+  hp: 100
+}
+p.move(0.16)    // call like a method
+```
+
+**4. Generics — untyped params are generic**
+
+```
+identity := (x) -> { x }
+a := identity(42)       // i32 version
+b := identity("hello")  // String version
+// Homun emits fn identity<T>(x: T) -> T, rustc monomorphizes
+```
+
+**5. Derive — generic functions replace it**
+
+```
+to_string := (x) -> str { "${x}" }   // works on any Display type
+clone := (x) -> { x }                // works on any Clone type
+// No #[derive] needed — the function IS the derive
+```
+
+### Putting It Together — ECS in Homun
+
+```
+// Components — just data
+Position := struct { x: float, y: float }
+Velocity := struct { dx: float, dy: float }
+Health   := struct { hp: int, max_hp: int }
+
+// Systems — just functions with ::= for mutation
+move_system := (pos ::= Position, vel: Velocity, dt: float) -> _ {
+  pos.x := pos.x + vel.dx * dt
+  pos.y := pos.y + vel.dy * dt
+}
+
+damage_system := (health ::= Health, amount: int) -> _ {
+  health.hp := max(0, health.hp - amount)
+}
+
+// The Rust engine handles entity storage and system scheduling.
+// Homun scripts define components (data) and systems (logic).
+```
+
+### Design Philosophy
+
+Homun delegates type checking to `rustc`. It does not reimplement Rust's type system — it generates Rust code and lets the Rust compiler enforce correctness. This is why Homun needs zero special syntax for traits, generics, or derive: **Rust already has them, and Homun compiles to Rust.**
