@@ -22,43 +22,43 @@ main := () -> _ {
 
   // ── re_is_match ─────────────────────────────────────────────────────────────
 
-  if (re_is_match("[0-9]+", "hello 42 world")) do {
+  if (re_is_match("[0-9]+", "hello 42 world")) {
     print("  ok: re_is_match finds digit in mixed string")
   } else {
     print("FAIL: re_is_match finds digit in mixed string")
   }
 
-  if (not re_is_match("[0-9]+", "no digits here")) do {
+  if (not re_is_match("[0-9]+", "no digits here")) {
     print("  ok: re_is_match false when pattern absent")
   } else {
     print("FAIL: re_is_match false when pattern absent")
   }
 
-  if (re_is_match("[a-zA-Z_][a-zA-Z0-9_]*", "foo_bar_123")) do {
+  if (re_is_match("[a-zA-Z_][a-zA-Z0-9_]*", "foo_bar_123")) {
     print("  ok: re_is_match identifier pattern found")
   } else {
     print("FAIL: re_is_match identifier pattern found")
   }
 
-  if (not re_is_match("[a-zA-Z]+", "")) do {
+  if (not re_is_match("[a-zA-Z]+", "")) {
     print("  ok: re_is_match false on empty string")
   } else {
     print("FAIL: re_is_match false on empty string")
   }
 
-  if (re_is_match("-->", "A --> B")) do {
+  if (re_is_match("-->", "A --> B")) {
     print("  ok: re_is_match arrow pattern in flowchart line")
   } else {
     print("FAIL: re_is_match arrow pattern in flowchart line")
   }
 
-  if (not re_is_match("^hello$", "hello world")) do {
+  if (not re_is_match("^hello$", "hello world")) {
     print("  ok: re_is_match anchored exact match fails on partial")
   } else {
     print("FAIL: re_is_match anchored exact match fails on partial")
   }
 
-  if (re_is_match("flowchart", "flowchart LR")) do {
+  if (re_is_match("flowchart", "flowchart LR")) {
     print("  ok: re_is_match flowchart keyword")
   } else {
     print("FAIL: re_is_match flowchart keyword")
@@ -67,17 +67,17 @@ main := () -> _ {
   // ── re_match at pos=0 ───────────────────────────────────────────────────────
 
   matched1, text1, end1 := re_match("[a-zA-Z_][a-zA-Z0-9_]*", "hello world", 0)
-  if (matched1) do {
+  if (matched1) {
     print("  ok: re_match identifier at pos 0 matches")
   } else {
     print("FAIL: re_match identifier at pos 0 matches")
   }
-  if (text1 == "hello") do {
+  if (text1 == "hello") {
     print("  ok: re_match at pos 0 captures 'hello'")
   } else {
     print("FAIL: re_match at pos 0 captures 'hello'")
   }
-  if (end1 == 5) do {
+  if (end1 == 5) {
     print("  ok: re_match end pos == 5 after 'hello'")
   } else {
     print("FAIL: re_match end pos == 5 after 'hello'")
@@ -86,12 +86,12 @@ main := () -> _ {
   // ── re_match no match ────────────────────────────────────────────────────────
 
   matched2, text2, end2 := re_match("[0-9]+", "hello world", 0)
-  if (not matched2) do {
+  if (not matched2) {
     print("  ok: re_match digit at 'hello' pos 0 -> no match")
   } else {
     print("FAIL: re_match digit at 'hello' pos 0 -> no match")
   }
-  if (text2 == "") do {
+  if (text2 == "") {
     print("  ok: re_match no match returns empty captured string")
   } else {
     print("FAIL: re_match no match returns empty captured string")
@@ -100,17 +100,17 @@ main := () -> _ {
   // ── re_match at offset ───────────────────────────────────────────────────────
 
   matched3, text3, end3 := re_match("[a-zA-Z_][a-zA-Z0-9_]*", "hello world", 6)
-  if (matched3) do {
+  if (matched3) {
     print("  ok: re_match identifier at pos 6 matches")
   } else {
     print("FAIL: re_match identifier at pos 6 matches")
   }
-  if (text3 == "world") do {
+  if (text3 == "world") {
     print("  ok: re_match at pos 6 captures 'world'")
   } else {
     print("FAIL: re_match at pos 6 captures 'world'")
   }
-  if (end3 == 11) do {
+  if (end3 == 11) {
     print("  ok: re_match end pos == 11 after 'world'")
   } else {
     print("FAIL: re_match end pos == 11 after 'world'")
@@ -119,17 +119,17 @@ main := () -> _ {
   // ── re_match arrow (fixed) pattern ──────────────────────────────────────────
 
   matched4, text4, end4 := re_match("-->", "--> B", 0)
-  if (matched4) do {
+  if (matched4) {
     print("  ok: re_match '-->' pattern matches")
   } else {
     print("FAIL: re_match '-->' pattern matches")
   }
-  if (text4 == "-->") do {
+  if (text4 == "-->") {
     print("  ok: re_match '-->' captures exactly '-->'" )
   } else {
     print("FAIL: re_match '-->' captures exactly '-->'")
   }
-  if (end4 == 3) do {
+  if (end4 == 3) {
     print("  ok: re_match '-->' ends at pos 3")
   } else {
     print("FAIL: re_match '-->' ends at pos 3")
@@ -138,12 +138,12 @@ main := () -> _ {
   // ── re_match empty text ──────────────────────────────────────────────────────
 
   matched5, text5, end5 := re_match("[a-z]+", "", 0)
-  if (not matched5) do {
+  if (not matched5) {
     print("  ok: re_match on empty text -> no match")
   } else {
     print("FAIL: re_match on empty text -> no match")
   }
-  if (text5 == "") do {
+  if (text5 == "") {
     print("  ok: re_match empty text returns empty string")
   } else {
     print("FAIL: re_match empty text returns empty string")
@@ -152,17 +152,17 @@ main := () -> _ {
   // ── re_match node_id (mermaid) pattern ──────────────────────────────────────
 
   matched6, text6, end6 := re_match("[a-zA-Z_][a-zA-Z0-9_]*", "node_A123 rest", 0)
-  if (matched6) do {
+  if (matched6) {
     print("  ok: re_match node_id pattern matches")
   } else {
     print("FAIL: re_match node_id pattern matches")
   }
-  if (text6 == "node_A123") do {
+  if (text6 == "node_A123") {
     print("  ok: re_match node_id captures 'node_A123'")
   } else {
     print("FAIL: re_match node_id captures 'node_A123'")
   }
-  if (end6 == 9) do {
+  if (end6 == 9) {
     print("  ok: re_match node_id ends at pos 9")
   } else {
     print("FAIL: re_match node_id ends at pos 9")
@@ -173,17 +173,17 @@ main := () -> _ {
   matched7a, text7a, end7a := re_match("[a-z]+", "abc", 0)
   matched7b, text7b, end7b := re_match("[a-z]+", "xyz", 0)
   matched7c, text7c, end7c := re_match("[a-z]+", "123", 0)
-  if (matched7a) do {
+  if (matched7a) {
     print("  ok: re_match cached '[a-z]+' matches 'abc'")
   } else {
     print("FAIL: re_match cached '[a-z]+' matches 'abc'")
   }
-  if (matched7b) do {
+  if (matched7b) {
     print("  ok: re_match cached '[a-z]+' matches 'xyz'")
   } else {
     print("FAIL: re_match cached '[a-z]+' matches 'xyz'")
   }
-  if (not matched7c) do {
+  if (not matched7c) {
     print("  ok: re_match cached '[a-z]+' no match on '123'")
   } else {
     print("FAIL: re_match cached '[a-z]+' no match on '123'")

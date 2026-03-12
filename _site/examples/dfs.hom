@@ -2,9 +2,9 @@
 // Demonstrates: recursion, list of lists, membership check (in)
 
 dfs := (graph: @[@[int]], node: int, visited: @[int]) -> @[int] {
-  if (node in visited) do { break => visited }
+  if (node in visited) { => visited }
   visited := visited + @[node]
-  for neighbor in graph[node] do {
+  for neighbor in graph[node] {
     visited := dfs(graph, neighbor, visited)
   }
   visited

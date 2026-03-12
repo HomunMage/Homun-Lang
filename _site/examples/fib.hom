@@ -3,12 +3,12 @@
 use std
 
 fib := (n: int) -> int {
-  if (n <= 1) do { break => n }
+  if (n <= 1) { => n }
   fib(n - 1) + fib(n - 2)
 }
 
 main := () -> _ {
-  for i in range(10) do {
+  for i in range(10) {
     print("fib(${i}) = ${fib(i)}")
   }
 }

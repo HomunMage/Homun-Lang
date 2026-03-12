@@ -19,143 +19,143 @@ main := () -> _ {
   print("=== test_chars ===")
 
   // ── is_alpha ────────────────────────────────────────────────────────────────
-  if (is_alpha("a")) do {
+  if (is_alpha("a")) {
     print("  ok: is_alpha lowercase 'a'")
   } else {
     print("FAIL: is_alpha lowercase 'a'")
   }
-  if (is_alpha("Z")) do {
+  if (is_alpha("Z")) {
     print("  ok: is_alpha uppercase 'Z'")
   } else {
     print("FAIL: is_alpha uppercase 'Z'")
   }
-  if (is_alpha("hello")) do {
+  if (is_alpha("hello")) {
     print("  ok: is_alpha multi-char alpha string")
   } else {
     print("FAIL: is_alpha multi-char alpha string")
   }
-  if (not is_alpha("3")) do {
+  if (not is_alpha("3")) {
     print("  ok: is_alpha false for digit '3'")
   } else {
     print("FAIL: is_alpha false for digit '3'")
   }
-  if (not is_alpha(" ")) do {
+  if (not is_alpha(" ")) {
     print("  ok: is_alpha false for space")
   } else {
     print("FAIL: is_alpha false for space")
   }
-  if (not is_alpha("a1")) do {
+  if (not is_alpha("a1")) {
     print("  ok: is_alpha false for alpha+digit mix")
   } else {
     print("FAIL: is_alpha false for alpha+digit mix")
   }
-  if (not is_alpha("")) do {
+  if (not is_alpha("")) {
     print("  ok: is_alpha false for empty string")
   } else {
     print("FAIL: is_alpha false for empty string")
   }
 
   // ── is_alnum ────────────────────────────────────────────────────────────────
-  if (is_alnum("a")) do {
+  if (is_alnum("a")) {
     print("  ok: is_alnum letter 'a'")
   } else {
     print("FAIL: is_alnum letter 'a'")
   }
-  if (is_alnum("9")) do {
+  if (is_alnum("9")) {
     print("  ok: is_alnum digit '9'")
   } else {
     print("FAIL: is_alnum digit '9'")
   }
-  if (is_alnum("foo123")) do {
+  if (is_alnum("foo123")) {
     print("  ok: is_alnum mixed alpha+digit string")
   } else {
     print("FAIL: is_alnum mixed alpha+digit string")
   }
-  if (not is_alnum("_")) do {
+  if (not is_alnum("_")) {
     print("  ok: is_alnum false for underscore")
   } else {
     print("FAIL: is_alnum false for underscore")
   }
-  if (not is_alnum(" ")) do {
+  if (not is_alnum(" ")) {
     print("  ok: is_alnum false for space")
   } else {
     print("FAIL: is_alnum false for space")
   }
-  if (not is_alnum("a_b")) do {
+  if (not is_alnum("a_b")) {
     print("  ok: is_alnum false for identifier with underscore")
   } else {
     print("FAIL: is_alnum false for identifier with underscore")
   }
-  if (not is_alnum("")) do {
+  if (not is_alnum("")) {
     print("  ok: is_alnum false for empty string")
   } else {
     print("FAIL: is_alnum false for empty string")
   }
 
   // ── is_digit ────────────────────────────────────────────────────────────────
-  if (is_digit("0")) do {
+  if (is_digit("0")) {
     print("  ok: is_digit '0'")
   } else {
     print("FAIL: is_digit '0'")
   }
-  if (is_digit("9")) do {
+  if (is_digit("9")) {
     print("  ok: is_digit '9'")
   } else {
     print("FAIL: is_digit '9'")
   }
-  if (is_digit("123")) do {
+  if (is_digit("123")) {
     print("  ok: is_digit multi-digit string '123'")
   } else {
     print("FAIL: is_digit multi-digit string '123'")
   }
-  if (not is_digit("a")) do {
+  if (not is_digit("a")) {
     print("  ok: is_digit false for letter 'a'")
   } else {
     print("FAIL: is_digit false for letter 'a'")
   }
-  if (not is_digit(" ")) do {
+  if (not is_digit(" ")) {
     print("  ok: is_digit false for space")
   } else {
     print("FAIL: is_digit false for space")
   }
-  if (not is_digit("1a")) do {
+  if (not is_digit("1a")) {
     print("  ok: is_digit false for digit+letter mix")
   } else {
     print("FAIL: is_digit false for digit+letter mix")
   }
-  if (not is_digit("")) do {
+  if (not is_digit("")) {
     print("  ok: is_digit false for empty string")
   } else {
     print("FAIL: is_digit false for empty string")
   }
 
   // ── is_ws ───────────────────────────────────────────────────────────────────
-  if (is_ws(" ")) do {
+  if (is_ws(" ")) {
     print("  ok: is_ws space")
   } else {
     print("FAIL: is_ws space")
   }
-  if (is_ws("   ")) do {
+  if (is_ws("   ")) {
     print("  ok: is_ws multiple spaces")
   } else {
     print("FAIL: is_ws multiple spaces")
   }
-  if (not is_ws("a")) do {
+  if (not is_ws("a")) {
     print("  ok: is_ws false for letter 'a'")
   } else {
     print("FAIL: is_ws false for letter 'a'")
   }
-  if (not is_ws("1")) do {
+  if (not is_ws("1")) {
     print("  ok: is_ws false for digit '1'")
   } else {
     print("FAIL: is_ws false for digit '1'")
   }
-  if (not is_ws(" a")) do {
+  if (not is_ws(" a")) {
     print("  ok: is_ws false for space+letter mix")
   } else {
     print("FAIL: is_ws false for space+letter mix")
   }
-  if (not is_ws("")) do {
+  if (not is_ws("")) {
     print("  ok: is_ws false for empty string")
   } else {
     print("FAIL: is_ws false for empty string")
