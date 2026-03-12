@@ -329,6 +329,7 @@ check_expr := (env: Scope, expr: Expr) -> @[str] {
         Some(e) => check_expr(env, e)
       }
     }
+    "EarlyReturn" => check_expr(env, expr_earlyreturn_val(expr))
     "Lambda" => {
       params     := expr_lambda_params(expr)
       lam_stmts  := expr_lambda_stmts(expr)
