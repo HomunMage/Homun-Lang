@@ -31,7 +31,7 @@ pat_names := (pat: Pat) -> @[str] {
       n := len(pats)
       i := 0
       names := errs_empty()
-      while (i < n) do {
+      while (i < n) {
         names := errs_join(names, pat_names(pats[i]))
         i := i + 1
       }
@@ -48,19 +48,19 @@ pat_names := (pat: Pat) -> @[str] {
 extend_with_pat := (env: Scope, pat: Pat) -> Scope {
   result := scope_clone(env)
   k := pat_kind(pat)
-  if (k == "Var") do {
+  if (k == "Var") {
     scope_insert(result, pat_var_name(pat))
   }
-  if (k == "Tuple") do {
+  if (k == "Tuple") {
     pats := pat_tuple_pats(pat)
     n := len(pats)
     i := 0
-    while (i < n) do {
+    while (i < n) {
       result := extend_with_pat(result, pats[i])
       i := i + 1
     }
   }
-  if (k == "Enum") do {
+  if (k == "Enum") {
     payload := pat_enum_payload(pat)
     match payload {
       none => {}
@@ -81,20 +81,20 @@ stmts_bound := (env: Scope, stmts: @[Stmt]) -> Scope {
   result := scope_clone(env)
   n := len(stmts)
   i := 0
-  while (i < n) do {
+  while (i < n) {
     s := stmts[i]
     k := stmt_kind(s)
-    if (k == "Bind" or k == "BindMut" or k == "StructDef" or k == "EnumDef") do {
+    if (k == "Bind" or k == "BindMut" or k == "StructDef" or k == "EnumDef") {
       scope_insert(result, stmt_bind_name(s))
     }
-    if (k == "BindPat" or k == "BindPatMut") do {
-      names := if (k == "BindPat") do {
+    if (k == "BindPat" or k == "BindPatMut") {
+      names := if (k == "BindPat") {
         pat_names(stmt_bindpat_pat(s))
       } else {
         pat_names(stmt_bindpat_mut_pat(s))
       }
       j := 0
-      while (j < len(names)) do {
+      while (j < len(names)) {
         scope_insert(result, names[j])
         j := j + 1
       }
@@ -114,21 +114,21 @@ check_stmts := (env: Scope, stmts: @[Stmt]) -> @[str] {
   errs := errs_empty()
   n := len(stmts)
   i := 0
-  while (i < n) do {
+  while (i < n) {
     s := stmts[i]
     errs := errs_join(errs, check_stmt(local_env, s))
     k := stmt_kind(s)
-    if (k == "Bind" or k == "BindMut" or k == "StructDef" or k == "EnumDef") do {
+    if (k == "Bind" or k == "BindMut" or k == "StructDef" or k == "EnumDef") {
       scope_insert(local_env, stmt_bind_name(s))
     }
-    if (k == "BindPat" or k == "BindPatMut") do {
-      names := if (k == "BindPat") do {
+    if (k == "BindPat" or k == "BindPatMut") {
+      names := if (k == "BindPat") {
         pat_names(stmt_bindpat_pat(s))
       } else {
         pat_names(stmt_bindpat_mut_pat(s))
       }
       j := 0
-      while (j < len(names)) do {
+      while (j < len(names)) {
         scope_insert(local_env, names[j])
         j := j + 1
       }
@@ -165,7 +165,7 @@ check_expr := (env: Scope, expr: Expr) -> @[str] {
   match k {
     "Var" => {
       name := expr_var_name(expr)
-      if (name == "_" or scope_contains(env, name)) do {
+      if (name == "_" or scope_contains(env, name)) {
         errs_empty()
       } else {
         errs_one("SEMA ERROR: undefined reference '${name}'")
@@ -197,7 +197,7 @@ check_expr := (env: Scope, expr: Expr) -> @[str] {
       n := len(items)
       i := 0
       errs := errs_empty()
-      while (i < n) do {
+      while (i < n) {
         errs := errs_join(errs, check_expr(env, items[i]))
         i := i + 1
       }
@@ -208,7 +208,7 @@ check_expr := (env: Scope, expr: Expr) -> @[str] {
       n := len(items)
       i := 0
       errs := errs_empty()
-      while (i < n) do {
+      while (i < n) {
         errs := errs_join(errs, check_expr(env, items[i]))
         i := i + 1
       }
@@ -219,7 +219,7 @@ check_expr := (env: Scope, expr: Expr) -> @[str] {
       n := len(items)
       i := 0
       errs := errs_empty()
-      while (i < n) do {
+      while (i < n) {
         errs := errs_join(errs, check_expr(env, items[i]))
         i := i + 1
       }
@@ -230,7 +230,7 @@ check_expr := (env: Scope, expr: Expr) -> @[str] {
       n := len(pairs)
       i := 0
       errs := errs_empty()
-      while (i < n) do {
+      while (i < n) {
         k_e, v_e := pairs[i]
         errs := errs_join(errs, errs_join(check_expr(env, k_e), check_expr(env, v_e)))
         i := i + 1
@@ -242,7 +242,7 @@ check_expr := (env: Scope, expr: Expr) -> @[str] {
       n := len(fields)
       i := 0
       errs := errs_empty()
-      while (i < n) do {
+      while (i < n) {
         fname, f_e := fields[i]
         errs := errs_join(errs, check_expr(env, f_e))
         i := i + 1
@@ -258,7 +258,7 @@ check_expr := (env: Scope, expr: Expr) -> @[str] {
       an := len(args)
       ai := 0
       arg_errs := errs_empty()
-      while (ai < an) do {
+      while (ai < an) {
         arg_errs := errs_join(arg_errs, check_expr(env, args[ai]))
         ai := ai + 1
       }
@@ -267,7 +267,7 @@ check_expr := (env: Scope, expr: Expr) -> @[str] {
     "If" => {
       cond_errs  := check_expr(env, expr_if_cond(expr))
       then_errs  := errs_join(check_stmts(env, expr_if_then_stmts(expr)), check_expr(env, expr_if_then_expr(expr)))
-      else_errs  := if (expr_if_has_else(expr)) do {
+      else_errs  := if (expr_if_has_else(expr)) {
         errs_join(check_stmts(env, expr_if_else_stmts(expr)), check_expr(env, expr_if_else_expr(expr)))
       } else {
         errs_empty()
@@ -280,7 +280,7 @@ check_expr := (env: Scope, expr: Expr) -> @[str] {
       an := len(arms)
       ai := 0
       arm_errs := errs_empty()
-      while (ai < an) do {
+      while (ai < an) {
         arm_errs := errs_join(arm_errs, check_arm(env, arms[ai]))
         ai := ai + 1
       }
@@ -337,7 +337,7 @@ check_expr := (env: Scope, expr: Expr) -> @[str] {
       env2       := scope_clone(env)
       pn := len(params)
       pi := 0
-      while (pi < pn) do {
+      while (pi < pn) {
         scope_insert(env2, param_name(params[pi]))
         pi := pi + 1
       }
@@ -381,10 +381,10 @@ run_sema := (prog: @[Stmt], imported_list: @[str], skip_undef: bool) -> @[str] {
   top_names := scope_new()
   pn := len(prog)
   pi := 0
-  while (pi < pn) do {
+  while (pi < pn) {
     s := prog[pi]
     k := stmt_kind(s)
-    if (k == "Bind" or k == "BindMut" or k == "StructDef" or k == "EnumDef") do {
+    if (k == "Bind" or k == "BindMut" or k == "StructDef" or k == "EnumDef") {
       scope_insert(top_names, stmt_bind_name(s))
     }
     pi := pi + 1
@@ -394,7 +394,7 @@ run_sema := (prog: @[Stmt], imported_list: @[str], skip_undef: bool) -> @[str] {
   env0     := scope_union(scope_union(builtins, top_names), imported)
 
   errs := errs_empty()
-  if (not skip_undef) do {
+  if (not skip_undef) {
     errs := check_stmts(env0, prog)
   }
   errs
