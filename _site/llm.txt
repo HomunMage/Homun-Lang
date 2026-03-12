@@ -44,16 +44,29 @@ add_typed := (a: int, b: int) -> int { a + b } // explicit types
 log := (msg) -> _ { print(msg) }               // void (-> _)
 greet := () -> str { "hello" }                  // no args
 
-// Mutable reference params with ::=
-increment := (c ::= Counter) -> _ { c.value := c.value + 1 }
+// Mutable reference params with :: (no space)
+increment := (c::Counter) -> _ { c.value := c.value + 1 }
 // compiles to: fn increment(c: &mut Counter) { ... }
 // call sites auto-pass &mut: increment(c)
+
+// Param defaults — := immutable default, ::= mutable default
+greet := (name:=str("world")) -> str { "Hello, ${name}!" }
+greet()          // "Hello, world!"
+greet("Alice")   // "Hello, Alice!"
 ```
+
+**Parameter forms:**
+| Syntax | Meaning |
+|---|---|
+| `name:Type` | immutable, no default |
+| `name::Type` | mutable (&mut), no default |
+| `name:=expr` | immutable, with default |
+| `name::=expr` | mutable (&mut), with default |
 
 ### Control Flow
 ```hom
-// if/else (use `do` before `{`)
-if (x > 0) do { print("positive") } else { print("non-positive") }
+// if/else
+if (x > 0) { print("positive") } else { print("non-positive") }
 
 // match (expression, result can be assigned)
 result := match dir {
@@ -63,15 +76,15 @@ result := match dir {
 }
 
 // for loop
-for i in range(10) do { print(i) }
-for item in list do { process(item) }
+for i in range(10) { print(i) }
+for item in list { process(item) }
 
 // while loop (use ::= for mutable counter)
 count ::= 10
-while (count > 0) do { count ::= count - 1 }
+while (count > 0) { count ::= count - 1 }
 
-// early return from loop
-break => value
+// early return from function/block
+=> value
 ```
 
 ### Pipe Operator (chain functions)
@@ -89,10 +102,10 @@ Point := struct { x: int, y: int }
 p := Point { x: 10, y: 20 }
 p.x := 15                      // field mutation
 
-// For in-place mutation via functions, use ::= for both binding and params:
+// For in-place mutation via functions, use :: in params:
 Counter := struct { value: int }
 c ::= Counter { value: 0 }
-increment := (c ::= Counter) -> _ { c.value := c.value + 1 }
+increment := (c::Counter) -> _ { c.value := c.value + 1 }
 increment(c)                   // c.value is now 1 (mutated in place)
 ```
 
@@ -135,7 +148,7 @@ or (b) copy/symlink the .rs files into the project's source directory.
 ### Error Handling (Result + ?)
 ```hom
 parse := (src: str) -> Result {
-  if (len(src) == 0) do { Err("empty") }
+  if (len(src) == 0) { Err("empty") }
   else { Ok(build_ast(src)) }
 }
 
@@ -226,7 +239,7 @@ empty := heap_is_empty(h)      // bool
 ```hom
 use re
 matched, text, end_pos := re_match("[a-z]+", src, pos)
-if (matched) do { print("found: ${text}") }
+if (matched) { print("found: ${text}") }
 
 ok := re_is_match("[0-9]+", "hello 42")   // true — matches anywhere in text
 ```
@@ -277,12 +290,12 @@ is_ws(" ")                      // true
 - Variables and functions: any naming style (no enforcement)
 - Types: `PascalCase` (convention)
 - Use `:=` for values that don't change, `::=` for values that will be reassigned
-- Use `::=` in function params when the function needs to mutate the argument
+- Use `::` in function params when the function needs to mutate the argument (e.g., `f::Type`)
 - No methods — use free functions: `set(canvas, x, y, ch)` not `canvas.set(x, y, ch)`
 - No classes — structs for data, functions for behavior
 - Pipe `|` for chaining instead of method chains
 - Last expression in `{}` is the return value (no `return` keyword)
-- `break => value` for early return from loops
+- `=> value` for early return from function/block
 
 ## Type Mapping (.hom → Rust)
 
@@ -343,7 +356,7 @@ cursor_peek := (c: Cursor, s: str) -> bool {
 }
 
 cursor_consume := (c: Cursor, s: str) -> bool {
-  if (cursor_peek(c, s)) do {
+  if (cursor_peek(c, s)) {
     c.pos := c.pos + len(s)
     true
   } else { false }

@@ -16,11 +16,11 @@ see _site/examples
 is_valid := (s) -> {
   stack := @[]
   pairs := @{")" : "(", "]" : "[", "}" : "{"}
-  for ch in s do {
-    if (ch in "([{") do {
+  for ch in s {
+    if (ch in "([{") {
       stack := stack + @[ch]
     } else {
-      if (len(stack) == 0 or stack[-1] != pairs[ch]) do { break => false }
+      if (len(stack) == 0 or stack[-1] != pairs[ch]) { => false }
       stack := stack[:-1]
     }
   }
@@ -29,7 +29,7 @@ is_valid := (s) -> {
 
 // Quicksort — recursion + pipe
 quicksort := (arr) -> {
-  if (len(arr) <= 1) do { break => arr }
+  if (len(arr) <= 1) { => arr }
   pivot := arr[0]
   rest  := arr[1:]
   left  := rest | filter((x) -> { x <= pivot })
@@ -39,9 +39,9 @@ quicksort := (arr) -> {
 
 // DFS — recursive
 dfs := (graph, node, visited) -> {
-  if (node in visited) do { break => visited }
+  if (node in visited) { => visited }
   visited := visited + @[node]
-  for neighbor in graph[node] do {
+  for neighbor in graph[node] {
     visited := dfs(graph, neighbor, visited)
   }
   visited
@@ -51,7 +51,7 @@ dfs := (graph, node, visited) -> {
 // Pattern Match
 fizz_buzz := (n: int) -> @[str] {
   result := @[]
-  for i in range(1, n+1) do {
+  for i in range(1, n+1) {
     value := match (i % 15, i % 3, i % 5) {
       0, _, _ => "FizzBuzz"
       _, 0, _ => "Fizz"
@@ -151,11 +151,25 @@ add_typed := (a: int, b: int) -> int { a + b }      // explicit (optional)
 log_event := (msg) -> _ { print(msg) }               // void (-> _)
 tick      := () -> _ { update() }                    // no args
 
-// Mutable reference params — ::= in param position
-increment := (c ::= Counter) -> _ { c.value := c.value + 1 }
+// Mutable reference params — :: in param position
+increment := (c::Counter) -> _ { c.value := c.value + 1 }
 // compiles to: fn increment(c: &mut Counter) { c.value = c.value + 1; }
 // call sites auto-pass &mut: increment(my_counter)
+
+// Param defaults — := immutable default, ::= mutable default
+greet := (name:=str("world")) -> str { "Hello, ${name}!" }
+greet()          // "Hello, world!"
+greet("Alice")   // "Hello, Alice!"
 ```
+
+### Parameter Forms
+
+| Syntax | Meaning |
+|---|---|
+| `name:Type` | immutable param, no default |
+| `name::Type` | mutable param (&mut), no default |
+| `name:=expr` | immutable param, with default |
+| `name::=expr` | mutable param (&mut), with default |
 
 Return type goes between `->` and `{`: `-> {` inferred, `-> Type {` explicit, `-> _ {` void.
 
@@ -174,7 +188,7 @@ identity("hello")  // str version
 Auto-detected — hidden `rec` mind.
 
 ```
-fib := (n) -> { if (n <= 1) do { n } else { fib(n-1) + fib(n-2) } }
+fib := (n) -> { if (n <= 1) { n } else { fib(n-1) + fib(n-2) } }
 ```
 
 ### Lambdas as Values
@@ -260,14 +274,14 @@ range(10, 0, -1)    // countdown
 
 ## Control Flow
 
-Condition blocks use `do` before `{`. Bare `else` has no `do`.
+Condition in parens, then `{`. Bare `else` before `{`.
 
 ### `if` / `else`
 
 No `elif`. Use `match` for multi-branch.
 
 ```
-if (hp <= 0) do { die() } else { recover() }
+if (hp <= 0) { die() } else { recover() }
 
 // multi-branch
 match true {
@@ -301,32 +315,32 @@ match find_target(pos) {
 ## Loops
 
 ```
-for i in range(10) do { print(i) }
-for item in inventory do { use(item) }
+for i in range(10) { print(i) }
+for item in inventory { use(item) }
 
 enemies ::= 10
-while (enemies > 0) do { enemies ::= enemies - 1 }
+while (enemies > 0) { enemies ::= enemies - 1 }
 ```
 
 `break` exits loop. `continue` skips iteration. Both work inside `match` blocks.
 
-### `break => value` — Early Return
+### `=> value` — Early Return
 
-`break` exits a loop. `break => value` exits with a value.
+`break` exits a loop. `=> value` returns early from the enclosing function/block.
 
 ```
 // Two Sum
 two_sum := (nums: @[], target) -> @[] {
   seen := @{}
-  for i in range(len(nums)) do {
+  for i in range(len(nums)) {
     comp := target - nums[i]
-    if (comp in seen) do { break => @[seen[comp], i] }
+    if (comp in seen) { => @[seen[comp], i] }
     seen[nums[i]] := i
   }
 }
 ```
 
-`break => _` exits a void.
+`=> _` returns void early.
 
 ---
 
@@ -370,10 +384,10 @@ p.hp := p.hp - 10           // field mutation
 
 pos := { x: 1.0, y: 2.0 }  // anonymous struct
 
-// For in-place mutation via functions, use ::= :
+// For in-place mutation via functions, use :: in params:
 Counter := struct { value: int }
 c ::= Counter { value: 0 }           // mutable binding
-add_n := (c ::= Counter, n: int) -> _ { c.value := c.value + n }
+add_n := (c::Counter, n: int) -> _ { c.value := c.value + n }
 add_n(c, 5)                           // c.value is now 5
 ```
 
@@ -540,7 +554,7 @@ Rust ECS frameworks (Bevy, hecs, legion) rely on five language features:
 
 ```
 // ::= gives &mut semantics, := keeps clone
-move := (pos ::= Position, vel: Velocity, dt: float) -> _ {
+move := (pos::Position, vel: Velocity, dt: float) -> _ {
   pos.x := pos.x + vel.dx * dt    // mutates in place
 }
 ```
@@ -596,12 +610,12 @@ Velocity := struct { dx: float, dy: float }
 Health   := struct { hp: int, max_hp: int }
 
 // Systems — just functions with ::= for mutation
-move_system := (pos ::= Position, vel: Velocity, dt: float) -> _ {
+move_system := (pos::Position, vel: Velocity, dt: float) -> _ {
   pos.x := pos.x + vel.dx * dt
   pos.y := pos.y + vel.dy * dt
 }
 
-damage_system := (health ::= Health, amount: int) -> _ {
+damage_system := (health::Health, amount: int) -> _ {
   health.hp := max(0, health.hp - amount)
 }
 
