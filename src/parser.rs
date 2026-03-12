@@ -176,6 +176,11 @@ impl Parser {
         loop {
             match self.peek().kind {
                 TokenKind::RBrace | TokenKind::Eof => break,
+                TokenKind::FatArrow => {
+                    self.advance();
+                    let e = self.parse_expr()?;
+                    stmts.push(Stmt::Expression(Expr::EarlyReturn(Box::new(e))));
+                }
                 TokenKind::Ident(_) => stmts.push(self.parse_block_bind()?),
                 _ => {
                     let e = self.parse_expr()?;
@@ -671,7 +676,17 @@ impl Parser {
         match &t.kind {
             TokenKind::Ident(n) => {
                 let name = n.clone();
+                // name::=expr  — mutable param with default
                 if self.consume(&TokenKind::MutAssign) {
+                    let default = self.parse_expr()?;
+                    Ok(Param {
+                        name,
+                        ty: None,
+                        mutable: true,
+                        default: Some(default),
+                    })
+                // name::Type   — mutable param, no default
+                } else if self.consume(&TokenKind::DoubleColon) {
                     let ty = self.parse_type_expr()?;
                     Ok(Param {
                         name,
@@ -679,6 +694,16 @@ impl Parser {
                         mutable: true,
                         default: None,
                     })
+                // name:=expr   — immutable param with default
+                } else if self.consume(&TokenKind::Assign) {
+                    let default = self.parse_expr()?;
+                    Ok(Param {
+                        name,
+                        ty: None,
+                        mutable: false,
+                        default: Some(default),
+                    })
+                // name:Type    — immutable param, no default
                 } else if self.consume(&TokenKind::Colon) {
                     let ty = self.parse_type_expr()?;
                     Ok(Param {
@@ -805,7 +830,7 @@ impl Parser {
         self.expect(&TokenKind::LParen)?;
         let cond = self.parse_expr()?;
         self.expect(&TokenKind::RParen)?;
-        self.expect(&TokenKind::Do)?;
+        self.consume(&TokenKind::Do);
         let then_stmts = self.parse_block_stmts_braced()?;
         let (ts, te) = Self::split_block(then_stmts);
         let else_clause = if self.check(&TokenKind::Else) {
@@ -973,7 +998,7 @@ impl Parser {
         };
         self.expect(&TokenKind::In)?;
         let iter = self.parse_expr()?;
-        self.expect(&TokenKind::Do)?;
+        self.consume(&TokenKind::Do);
         let stmts = self.parse_block_stmts_braced()?;
         let (ss, fe) = Self::split_block(stmts);
         Ok(Expr::For(var_name, Box::new(iter), ss, Some(Box::new(fe))))
@@ -984,7 +1009,7 @@ impl Parser {
         self.expect(&TokenKind::LParen)?;
         let cond = self.parse_expr()?;
         self.expect(&TokenKind::RParen)?;
-        self.expect(&TokenKind::Do)?;
+        self.consume(&TokenKind::Do);
         let stmts = self.parse_block_stmts_braced()?;
         let (ss, fe) = Self::split_block(stmts);
         Ok(Expr::While(Box::new(cond), ss, Some(Box::new(fe))))
@@ -992,6 +1017,8 @@ impl Parser {
 
     fn parse_break_expr(&mut self) -> Result<Expr, String> {
         self.expect(&TokenKind::Break)?;
+        // Old syntax: `break => val` kept as Break(Some(val)) for backward compat
+        // (codegen emits `return val`). New syntax uses standalone `=> val`.
         if self.check(&TokenKind::FatArrow) {
             self.advance();
             let e = self.parse_expr()?;

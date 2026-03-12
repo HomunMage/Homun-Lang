@@ -4,11 +4,11 @@ use std
 
 Counter := struct { value: int }
 
-increment := (c ::= Counter) -> _ {
+increment := (c::Counter) -> _ {
   c.value := c.value + 1
 }
 
-add_n := (c ::= Counter, n: int) -> _ {
+add_n := (c::Counter, n:int) -> _ {
   c.value := c.value + n
 }
 
