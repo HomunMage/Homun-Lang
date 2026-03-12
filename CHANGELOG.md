@@ -6,6 +6,19 @@ Branches: `history` (spec drafts), `haskell` (Haskell compiler), `rust` (Rust re
 
 ---
 
+### v0.69 — Syntax Overhaul: EarlyReturn, Optional `do`, New Param Forms
+
+- Added `EarlyReturn(Box<Expr>)` to AST and `=> expr` early-return syntax
+- Added `DoubleColon` (`::`) token; `::param` form for mutable params
+- Made `do` keyword optional in `if`/`for`/`while` control flow
+- Parser accepts 4 param forms: `:` (typed), `::` (mutable), `:=` (default), `::=` (mutable+default)
+- Codegen emits `return <val>` for EarlyReturn, `break` for Break
+- Param defaults: missing trailing args filled from default exprs at call site
+- Sema updated to check EarlyReturn nodes
+- All `_site/examples/*.hom` converted to new syntax (no `do`, `=> val` early return)
+
+---
+
 ### v0.63 Mutable Assign Operator
 
 Added MutAssign operator ::= to Homun
