@@ -6,94 +6,80 @@ Branches: `history` (spec drafts), `haskell` (Haskell compiler), `rust` (Rust re
 
 ---
 
-### v0.88 — 2026-05-07 — F12 construct-side Box auto-wrap, F9 cross-file fix, gen/ → src/
+### v0.89 — 2026-05-28 — `--import` flag for cross-file enum awareness (stage 1)
 
-Two language-feature corrections + bin-entry simplification, in three commits.
+Stage-1 bootstrap: ship the `--import` infrastructure compiling cleanly from the v0.88 bootstrap. Stage 2 (v0.90) will use the new homunc to migrate `parser.hom`/`codegen.hom`/`sema.hom` from `mk_expr_*` / `expr_*` accessors to direct `Expr.*` construction and direct match destructures.
 
-- **F12 construct-side Box<T> auto-wrap**: when a self-recursive enum variant has a directly recursive field (e.g. `Tree.Node(Tree, Tree)`), codegen now auto-emits `Box::new(...)` around each recursive arg at the call site. Mirrors F9 match-side `let l = *l;` rebinds — construct ↔ destructure stay symmetric. Reuses the existing `variant_field_types` registry (DFS-pre-pass, cross-file aware). MVP handles direct `TypeExpr.Name(enum)`; nested `Option<T>`/Tuple recursion still falls through. Two new fixtures: `_site/examples/box_construct.hom` (same-file) and `tests/examples/cross_file_box_construct/` (cross-file). Unblocks the bulk of `parser_imp.rs`'s `mk_expr_*`/`mk_type_*` constructors for v0.89 migration
-- **Stale F9 comment fix + accessor migration pilot**: a stale comment in `codegen.hom` claimed F8b auto-deref doesn't apply when the enum is defined cross-file. F9 (v0.85) actually fixed this — verified by adding cross-file fixtures with direct positional bindings (`Tree.Node(l, r) → let l = *l; let r = *r;`). Migrated 6 accessor call sites in `codegen.hom` (cg_lvalue, cg_expr arms for Field/Index/Pipe/Call) and 6 in `sema.hom` (Field/Index/BinOp/Pipe/UnOp/Call) from `expr_*_*` accessors to direct positional match bindings. Per-call accessor count in `codegen.hom` dropped from 21 to ~9
-- **`gen/` → `src/main_entry.rs`**: the 4-line bin entry shim now lives directly in `src/main_entry.rs` (committed, static). `build.rs::generate_bin_entry()` and the `/gen/` `.gitignore` exception both deleted (~25 lines net). Cargo's `[[bin]].path` points at `src/main_entry.rs`. No behavior change — purely a structural simplification
-- 147 tests pass (118 unit + 24 examples + 5 std-tests), `cargo fmt --check` + `cargo clippy --release -- -D warnings` clean
-
----
-
-### v0.87 — 2026-05-06 — Audit follow-ups: codegen dedupe, heap mut, _imp.rs shrink, doc/code drift cleanup
-
-Nine-ticket batch from the v0.86 audit, executed by the autonomous claude-bot. 27 tests pass, `cargo fmt` + `cargo clippy -- -D warnings` clean. Net diff: **+220 / −374** across 19 files.
-
-- **codegen.hom dedupe** (tickets 4-5): extracted `cg_bind_common` + `cg_top_bind` to merge `Stmt.Bind` and `Stmt.BindMut` arms (byte-identical apart from `attrs` and `let mut`); extracted `cg_str_or_expr` and `infer_const_ty` helpers; collapsed the 5-deep `Str/Int/Float/Bool/Char` ladder to a direct match. Killed ~12 `expr_kind` callsites
-- **`hom-std/heap.rs` Rc<RefCell> migration** (ticket 6): replaced `Rc<RefCell<BinaryHeap<...>>>` with plain `BinaryHeap`, registered as `&mut Heap` callee like v0.85's set/dict mutators. Closes CLAUDE.md TODO #2
-- **`_imp.rs` shrink** (ticket 9): migrated 11 pure-logic helpers from `parser_imp.rs` and `lexer_imp.rs` to `.hom` (`vec_concat_*`, `pos_inc_col`/`add_col`/`newline`, `unescape_char`, `is_upper_first_str`, `neg_i64`/`neg_f64`, `names_to_pats`); added `is_upper` to `hom-std/chars.rs`. Partial close of CLAUDE.md TODO #3
-- **`src/lib.rs` cleanup** (tickets 7-8): collapsed 6 `mod X_mod { include!(); include!(); }` blocks via `embed_test_mod!` macro_rules!; removed 4 obsolete `#![allow(...)]` lints (`clippy::single_match`, `almost_swapped`, `iter_overeager_cloned`, `bool_comparison`)
-- **Dead code** (ticket 3): deleted two zero-caller `dep/codegen_helpers.rs` helpers (`clear_variant_field_types`, `derive_attrs`)
-- **Doc/code drift fixup** (ticket 1): `Compiler-Design.md` tree refreshed (removed deleted `main.rs`/`ast.rs`, added `gen/main_entry.rs`, `ast.hom`, `scope.hom`, `set.rs`/`fs.rs`/`path.rs`); `CLAUDE.md` TODO #1 retired (already shipped v0.84); `_imp.rs` ratio refreshed; `README.md` `is_space → is_whitespace`+`is_newline`; `_site/llm.txt` `use fs`/`use path` sections added
-- **`.tmp/` cleanup** (ticket 2): reclaimed ~14 MB of stale binaries, merged-version patches, March scratch
-- **CI fix**: `gen/main_entry.rs` shim now tracked so `cargo fmt --check` works on fresh clone (Dockerfile.test, WASM job)
-
-Hom:Rs LOC ratio nudged from 1.53 toward 1.55+; `parser_imp.rs` shrunk 47 lines. Bot autonomy: 9/9 tickets shipped over ~1h29min, no debugging timeouts (TIMEOUT bumped to 1800s mid-run).
+- `--import <file.hom>` CLI flag: pre-parses an external `.hom` and registers its enum variant field types into the codegen registry, so F9 (match auto-deref) and F12 (construct auto-wrap) work cross-file
+- `main.hom`: `collect_imports` / `filter_imports` / `process_imports` consume `--import` pairs from argv and run lex → parse → `register_external_types` per file
+- `main_imp.rs`: new `read_file` (exits on I/O error) + Rust shim for `register_external_types`
+- `codegen.hom`: new `register_external_types(stmts)` walks `Stmt.EnumDef` and calls the existing `register_variant_field_types` registry
+- 147 tests pass, `cargo fmt` + `cargo clippy --release -- -D warnings` clean
 
 ---
 
-### v0.86 — 2026-05-05 — `chars` consolidation, kill `src/main.rs`, hoist hom-std tests
+### v0.88 — 2026-05-07 — F12 construct-side Box auto-wrap, F9 cross-file fix, `gen/` → `src/`
 
-Consumed v0.85 features in a few targeted source moves; the deeper migrations (R4c parser_imp, R6 resolver, Box<T>/Lambda accessor sweep) hit the 900s worker timeout and stayed in `debugging` for next cycle.
-
-- `hom-std/chars.rs`: replaced the existing `impl AsRef<str>` predicates with the single-char-String versions that `lexer_imp.rs` was carrying (`is_alpha`, `is_digit`, `is_alnum` (now treats `_` as alnum), renamed `is_ws` → `is_whitespace`, added `is_newline`); src/lexer.hom now `use chars` and the 5 helpers are gone from `lexer_imp.rs`. `build.rs` wraps the embedded chars module in `pub mod chars { ... }` so it doesn't collide with `std/str.rs`'s same-named predicates
-- `src/main.rs` deleted: `build.rs` writes a 3-line shim to `gen/main_entry.rs` early in `main()`, Cargo `[[bin]].path = "gen/main_entry.rs"`, `gen/` gitignored. Entry module now lives entirely in `main.hom` + `main_imp.rs`
-- `hom-std/{dict,fs,path,re,set,str_ext}.rs`: 623 lines of inline `#[cfg(test)] mod tests` blocks moved to `tests/std-tests/`. New files `test_set.rs`, `test_fs.rs`, `test_path.rs` created for the F11 set + the previously-untested fs/path modules; `test_dict.rs` extended with the v0.85 mutation helpers
-- `tests/examples/char_builtins/`: smoke test updated for new `chars` API surface (`is_whitespace`, `is_newline`, `is_alnum("_") == true`)
-- `_site/llm.txt`: chars section reflects new predicate set
-- 175 tests pass, `cargo fmt` + `cargo clippy -- -D warnings` clean
-- Hom:Rs ratio unchanged at **1.53** — the migration tickets that would have moved the needle (R4c parser_imp, R6 resolver, Box<T>/Lambda accessor sweep) timed out at 900s and stayed in `debugging`; carry to v0.87
-- Bot autonomy: rn=53/56/57 left in `debugging` after worker timeout, rn=51/52/54/55/58/59 merged
+- **F12** construct-side `Box<T>` auto-wrap for self-recursive enum variants (mirrors F9's match-side rebinds); reuses the `variant_field_types` registry
+- Migrated 12 accessor sites in `codegen.hom`/`sema.hom` to direct positional bindings (F9 was already cross-file safe)
+- Bin entry shim moved from generated `gen/main_entry.rs` to committed `src/main_entry.rs`; `build.rs::generate_bin_entry()` deleted
+- 147 tests pass
 
 ---
 
-### v0.85 — 2026-05-05 — Direct-match Expr/TypeExpr dispatch, set/dict mutation stdlib
+### v0.87 — 2026-05-06 — Audit follow-ups (9-ticket bot batch)
 
-Pushed direct-match dispatch into the two remaining holdouts (`check_expr` in `sema.hom`, `cg_expr`/`codegen_type` in `codegen.hom`) and shipped the missing in-place mutation stdlib for sets and dicts.
+- `codegen.hom` dedupe: extracted `cg_bind_common`/`cg_top_bind`, `cg_str_or_expr`, `infer_const_ty`; killed ~12 `expr_kind` callsites
+- `hom-std/heap.rs`: dropped `Rc<RefCell<BinaryHeap>>` for plain `BinaryHeap` (registered as `&mut Heap` callee)
+- `_imp.rs` shrink: migrated 11 pure-logic helpers from `parser_imp.rs`/`lexer_imp.rs` to `.hom`; added `is_upper` to `chars`
+- `lib.rs`: collapsed 6 test `mod` blocks via `embed_test_mod!` macro; removed 4 obsolete `#![allow(...)]` lints
+- CI fix: `gen/main_entry.rs` shim tracked so `cargo fmt --check` works on fresh clone
+- Net diff +220 / −374 across 19 files; bot shipped 9/9 tickets in ~1h29min
 
-- `sema.hom` and `codegen.hom`: `expr_kind` / `type_kind` discriminator + accessor calls replaced with direct `match` arms on AST variants. Box<Expr>-bearing arms keep their accessor calls (auto-deref doesn't apply when the enum is defined cross-file in `ast.hom`); `Lambda` is handled via early-out before the match because of its named fields
-- `dep/codegen_helpers.rs`: 6 zero-caller `expr_*` accessors (`expr_list_items`, `expr_set_items`, `expr_dict_pairs`, `expr_struct_name`, `expr_struct_fields`, …) deleted; new `register_variant_field_types` / `variant_field_types_get` registry added so cross-file variants can drive Box auto-deref in match patterns
-- `hom-std/set.rs` (new): `set_new`, `set_add`, `set_remove`, `set_clear` — `&mut HashSet` mutators registered in `register_known_dep_fns` with `[true, false, …]` flags so callers get `&mut s` codegen
-- `hom-std/dict.rs`: added `dict_insert`, `dict_remove`, `dict_clear` — same `&mut` registration pattern
-- `lib.rs`: `embedded_rs("set"|"dict")` now strips redundant `use std::collections::{HashMap,HashSet}` lines to avoid colliding with `builtin.rs`'s prelude when embedded
-- New examples: `_site/examples/box_match.hom` (self-recursive `List`/`Tree` match), `tests/examples/cross_file_box_match/` (variant defined in module A, matched in module B), `tests/examples/char_builtins/` (F10 `use chars` smoke test), `tests/examples/set_dict_mut/` (F11 mutation contract)
-- `_site/llm.txt`: documented `use set` and the new `dict_insert/remove/clear` API
-- 199 tests pass (172 unit + 22 examples + 5 hom_std), `cargo fmt` + `cargo clippy -- -D warnings` clean
+---
+
+### v0.86 — 2026-05-05 — `chars` consolidation, kill `src/main.rs`, hoist `hom-std` tests
+
+- `hom-std/chars.rs`: consolidated single-char predicates from `lexer_imp.rs` (`is_alpha`/`is_digit`/`is_alnum`/`is_whitespace`/`is_newline`); `lexer.hom` now `use chars`
+- `src/main.rs` deleted; `build.rs` writes a 3-line shim to `gen/main_entry.rs`, entry lives entirely in `main.hom` + `main_imp.rs`
+- 623 lines of inline `#[cfg(test)]` blocks in `hom-std/` hoisted to `tests/std-tests/`; new `test_set.rs`/`test_fs.rs`/`test_path.rs`
+- 175 tests pass; deeper migration tickets (R4c parser_imp, R6 resolver) hit 900s worker timeout, carried to v0.87
+
+---
+
+### v0.85 — 2026-05-05 — Direct-match `Expr`/`TypeExpr` dispatch, set/dict mutation stdlib
+
+- `sema.hom` + `codegen.hom`: `expr_kind`/`type_kind` discriminator calls replaced with direct `match` arms; Box-bearing arms kept accessor calls (pre-F9-cross-file)
+- `dep/codegen_helpers.rs`: deleted 6 zero-caller `expr_*` accessors; added `register_variant_field_types`/`variant_field_types_get` registry for cross-file Box auto-deref
+- New `hom-std/set.rs` (`set_new`/`set_add`/`set_remove`/`set_clear`) + `dict_insert`/`dict_remove`/`dict_clear` — all `&mut`-registered
+- New fixtures: `box_match.hom`, `cross_file_box_match/`, `char_builtins/`, `set_dict_mut/`
+- 199 tests pass
 
 ---
 
 ### v0.84 — 2026-04-30 — `ast.rs` → `ast.hom` + delete `dep/ast_access.rs`
 
-Cashed in the v0.82 features (multi-payload variants F1, or-patterns F3, `@derive` F4 with auto-Box for self-recursive enums) on the two pending high-leverage targets that v0.83 deferred. Hom:Rs ratio: **0.77 (v0.81) → 1.18 (v0.83) → 1.45 (now)**.
+Cashed in v0.82's features (multi-payload variants, or-patterns, `@derive` auto-Box) on the two highest-leverage targets v0.83 deferred. Hom:Rs ratio: **0.77 → 1.18 → 1.45**.
 
-- `src/ast.rs` (207 lines) → `src/ast.hom` (~80 lines): all 12 AST type defs use `@derive(Clone, Debug)`; auto-Box recurses through `Option<T>` / `Tuple` wrappers (the v0.83 `codegen_helpers.rs` fix was the unblocker)
-- `resolver.hom`: `stmt_kind` / `stmt_use_path` callsites replaced with direct `match Stmt { … }` arms
-- `sema.hom`: `stmt_kind` / `pat_kind` / `param_*` accessors replaced with multi-payload destructure + or-patterns; `expr_kind` accessors kept where Box<Expr> deref is needed; added `expr_is_lambda` helper to `sema_imp.rs` for ThreadLocal check
-- `codegen.hom`: all `stmt_*` / `pat_*` / `arm_*` / `param_*` / `fielddef_*` / `variantdef_*` accessors replaced with direct `match` + field access; `expr_*` / `type_*` accessors kept (Box<T> deref still needed for self-recursive variants)
-- `src/dep/ast_access.rs` (964 lines) **deleted**. 53 still-needed `expr_*` / `type_*` Box-deref helpers moved into `src/dep/codegen_helpers.rs`; 40 zero-caller fns dropped
-- Net: **−409 lines** in `dep/` Rust shims, +75 lines in `src/*.hom`. Total `.rs` (src + dep): 3,549 → 2,943
-- 182 tests pass, `cargo fmt` + `cargo clippy -- -D warnings` clean
-- 5 sub-tickets executed autonomously by claude-bot in ~85 min: R1b (ast.hom retry), R2a (resolver), R2b (sema), R2c (codegen), R2d (delete)
+- `src/ast.rs` (207 lines) → `src/ast.hom` (~80 lines): 12 AST types with `@derive(Clone, Debug)`; auto-Box through `Option<T>`/`Tuple`
+- `resolver.hom`/`sema.hom`/`codegen.hom`: replaced `stmt_*`/`pat_*`/`arm_*`/`param_*`/`fielddef_*`/`variantdef_*` accessors with direct `match` + field access; `expr_*`/`type_*` accessors kept for Box-deref
+- `src/dep/ast_access.rs` (964 lines) **deleted**; 53 needed Box-deref helpers moved into `codegen_helpers.rs`
+- Net: **−409 lines** of `dep/` Rust; 182 tests pass; 5 sub-tickets shipped by claude-bot in ~85 min
 
 ---
 
 ### v0.83 — 2026-04-29 — Hom:Rs ratio rebalanced via 10 self-host reductions
 
-Applied the v0.82 language additions (multi-payload variants, or-patterns, `@derive` on .hom enums, `@thread_local`, `path`/`fs` stdlib, explicit generics) to shrink the compiler's `_imp.rs` and `dep/` Rust shims. Foundation features F1–F6 landed alongside v0.82's F7 in the same dev cycle.
+Applied v0.82's language additions (multi-payload variants, or-patterns, `@derive`, `@thread_local`, `path`/`fs` stdlib, explicit generics) to shrink `_imp.rs` and `dep/` shims.
 
-- `Pos`/`Token`/`TokenKind` migrated from `lexer_imp.rs` to `lexer.hom`; deleted 8 `make_token_*` constructors
-- Inlined ~60 trivial `mk_*` AST constructors in `parser.hom`; call sites use enum literals directly (`Stmt.Bind(n, e, a)`)
-- Parser state: `parse_pos`/`parse_err`/`gensym_counter` now `@thread_local` bindings in `parser.hom`
-- `Found`/`ResolverState`/`ResolvedFile` migrated to `resolver.hom` with `@derive(Clone)`; ~100 lines pulled out of `resolver_imp.rs`
-- Resolver `read_file`/`file_exists`/`path_*` wrappers replaced with `fs`/`path` stdlib calls
-- 8 codegen helpers moved to `codegen.hom`: `parse_interp`, `escape_str`, `codegen_string`, `codegen_type`, `codegen_type_variant_field`, `codegen_param`, `codegen_params_mut`, `infer_generics`
-- Fn-signature registry split: logic in `codegen.hom`, thread-local storage moved from `dep/codegen_helpers.rs` to `codegen_imp.rs` (per-module layering)
-- `dep/scope.rs` (64 lines) migrated to `src/scope.hom` (23 lines) + thin `scope_imp.rs` (8 lines); Scope backed by `@[str]` Vec
-- `compile_source` / `compile_file` pipeline migrated from `main_imp.rs` to `main.hom`; `main_imp.rs` keeps only system I/O + version + preamble
-- Net: ~−1,000 lines of `.rs` (mix of absorbed-into-`.hom` and net-deleted); 182 tests pass throughout, `cargo fmt` + `cargo clippy -- -D warnings` clean
-- Deferred: `src/ast.rs` → `src/ast.hom` migration. Blocked by `codegen_type_variant_field` not auto-Boxing through `Option<T>` wrappers (only direct `Name` fields). When v0.82 bootstrap is built with the v0.83 codegen.hom fix, this migration can land.
+- Lexer: `Pos`/`Token`/`TokenKind` migrated to `lexer.hom`; 8 `make_token_*` constructors deleted
+- Parser: ~60 trivial `mk_*` AST constructors inlined in `parser.hom`; state (`parse_pos`/`parse_err`/`gensym_counter`) made `@thread_local`
+- Resolver: `Found`/`ResolverState`/`ResolvedFile` migrated to `resolver.hom`; `read_file`/`path_*` wrappers replaced with stdlib
+- Codegen: 8 helpers (`parse_interp`, `escape_str`, `codegen_string`, `codegen_type`, …) moved to `codegen.hom`; fn-signature registry split (logic in `.hom`, state in `_imp.rs`)
+- Scope: `dep/scope.rs` (64 lines) → `src/scope.hom` (23 lines) + thin `scope_imp.rs`
+- Main pipeline: `compile_source`/`compile_file` migrated to `main.hom`
+- Net ~**−1,000 lines** of `.rs`; 182 tests pass
+- Deferred: `src/ast.rs` → `src/ast.hom` (blocked on `codegen_type_variant_field` Option-wrapping; landed in v0.84)
 
 ---
 

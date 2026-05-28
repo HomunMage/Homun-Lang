@@ -97,6 +97,14 @@ pub fn emit_runtime_fn() {
     }
 }
 
+/// Read a file to a String. Exits on I/O error.
+pub fn read_file(path: String) -> String {
+    std::fs::read_to_string(&path).unwrap_or_else(|e| {
+        eprintln!("Cannot read {}: {}", path, e);
+        std::process::exit(1);
+    })
+}
+
 /// Extract the Ok value from a Result<String, String>.
 /// On Err, prints the error to stderr and exits with code 1.
 pub fn result_ok_or_exit(result: Result<String, String>) -> String {
@@ -130,6 +138,10 @@ pub fn sema_analyze_skip_undef(ast: Vec<Stmt>, imported: Vec<String>) -> Vec<Str
 
 pub fn register_known_dep_fns() {
     crate::codegen_hom::register_known_dep_fns()
+}
+
+pub fn register_external_types(ast: Vec<Stmt>) {
+    crate::codegen_hom::register_external_types(ast)
 }
 
 /// Call codegen_program_with_resolved with an empty HomFiles set.

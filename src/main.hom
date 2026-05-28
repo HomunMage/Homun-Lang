@@ -47,6 +47,68 @@ filter_flags := (args: @[str], f1: str, f2: str) -> @[str] {
 }
 
 
+// ─── collect_imports ──────────────────────────────────────────────────────────
+// Extract file paths from --import flags.  Each --import consumes the next arg.
+
+collect_imports := (args: @[str]) -> @[str] {
+  n := len(args)
+  result := @[]
+  i := 0
+  while (i < n) {
+    if (args[i] == "--import" and i + 1 < n) {
+      push(result, args[i + 1])
+      i := i + 2
+    } else {
+      i := i + 1
+    }
+  }
+  result
+}
+
+
+// ─── filter_imports ──────────────────────────────────────────────────────────
+// Remove --import and its argument from the args list.
+
+filter_imports := (args: @[str]) -> @[str] {
+  n := len(args)
+  result := @[]
+  i := 0
+  while (i < n) {
+    if (args[i] == "--import" and i + 1 < n) {
+      i := i + 2
+    } else {
+      push(result, args[i])
+      i := i + 1
+    }
+  }
+  result
+}
+
+
+// ─── process_imports ─────────────────────────────────────────────────────────
+// Lex+parse each --import file and register its enum types for F9/F12.
+
+process_imports := (imports: @[str]) -> _ {
+  n := len(imports)
+  i := 0
+  while (i < n) {
+    src := read_file(imports[i])
+    tokens_r := lex(src)
+    match tokens_r {
+      Ok(toks) -> {
+        ast_r := parse(toks)
+        match ast_r {
+          Ok(ast) -> { register_external_types(ast) }
+          Err(_) -> {}
+        }
+      }
+      Err(_) -> {}
+    }
+    i := i + 1
+  }
+}
+
+
 // ─── print_help ───────────────────────────────────────────────────────────────
 
 print_help := () -> _ {
@@ -54,11 +116,12 @@ print_help := () -> _ {
   print("homunc ${ver} — Homun to Rust compiler")
   print("")
   print("USAGE:")
-  print("  homunc <input.hom>            Compile and print Rust to stdout")
-  print("  homunc <input.hom> -o out.rs  Compile and write to file")
-  print("  homunc --emit-runtime         Print embedded runtime to stdout")
-  print("  homunc -v, --version          Show version")
-  print("  homunc -h, --help             Show this message")
+  print("  homunc <input.hom>                         Compile and print Rust to stdout")
+  print("  homunc <input.hom> -o out.rs               Compile and write to file")
+  print("  homunc --import types.hom --module src.hom  Register external enum types")
+  print("  homunc --emit-runtime                      Print embedded runtime to stdout")
+  print("  homunc -v, --version                       Show version")
+  print("  homunc -h, --help                          Show this message")
   print("")
   print("PIPELINE:")
   print("  .hom source  ->  Lexer  ->  Parser  ->  Sema  ->  Codegen  ->  .rs")
@@ -183,10 +246,13 @@ main := () -> _ {
   emit_rt := has_flag(args, "--emit-runtime")
   filtered := filter_flags(args, "--raw", "--module")
   filtered := filter_flags(filtered, "--emit-runtime", "--emit-runtime")
+  imports := collect_imports(filtered)
+  filtered := filter_imports(filtered)
   n := len(filtered)
   if (emit_rt) {
     emit_runtime_fn()
   } else {
+  process_imports(imports)
   if (n == 0) {
     compile_from_stdin(raw_final)
   } else {

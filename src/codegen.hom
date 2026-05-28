@@ -62,6 +62,41 @@ register_known_dep_fns := () -> _ {
   fn_defaults_insert("dict_clear",  @[none])
 }
 
+// ─── register_external_types ──────────────────────────────────────────────────
+// Pre-register variant field types from an externally-parsed AST (e.g. via
+// --import).  Mirrors the pre-pass in codegen_program_with_resolved so that
+// F9 (match auto-deref) and F12 (construct auto-wrap) work cross-file.
+
+register_external_types := (stmts: @[Stmt]) -> _ {
+  n := len(stmts)
+  j := 0
+  while (j < n) {
+    match stmts[j] {
+      Stmt.EnumDef(ename, variants, _) -> {
+        nv := len(variants)
+        vi := 0
+        while (vi < nv) {
+          v := variants[vi]
+          vfields := v.fields
+          field_tys := @[]
+          fi := 0
+          nf := len(vfields)
+          while (fi < nf) {
+            fname_opt, fty := vfields[fi]
+            push(field_tys, fty)
+            fi := fi + 1
+          }
+          qual := "${ename}.${v.name}"
+          register_variant_field_types(qual, field_tys)
+          vi := vi + 1
+        }
+      }
+      _ -> {}
+    }
+    j := j + 1
+  }
+}
+
 register_fn_sig := (name: str, params: @[Param]) -> _ {
   flags := @[]
   defaults := @[]
