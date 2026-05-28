@@ -156,6 +156,8 @@ fn compile_hom_files() {
 
     let homunc = find_homunc();
 
+    println!("cargo:rerun-if-changed=src/ast.hom");
+
     for entry in hom_entries {
         let path = entry.path();
         let stem = path.file_stem().unwrap().to_string_lossy().to_string();
@@ -184,14 +186,19 @@ fn compile_hom_files() {
         }
 
         if needs_compile {
-            let status = Command::new(&homunc)
-                .args([
-                    "--module",
-                    &path.to_string_lossy(),
-                    "-o",
-                    &rs_path.to_string_lossy(),
-                ])
-                .status();
+            let mut cmd_args = vec!["--module".to_string()];
+            if stem != "ast" {
+                let ast_path = PathBuf::from("src/ast.hom");
+                if ast_path.exists() {
+                    cmd_args.push("--import".to_string());
+                    cmd_args.push(ast_path.to_string_lossy().into_owned());
+                }
+            }
+            cmd_args.push(path.to_string_lossy().into_owned());
+            cmd_args.push("-o".to_string());
+            cmd_args.push(rs_path.to_string_lossy().into_owned());
+
+            let status = Command::new(&homunc).args(&cmd_args).status();
             match status {
                 Ok(s) if s.success() => {
                     // Strip duplicate #[cfg(test)] mod tests blocks from inlined deps

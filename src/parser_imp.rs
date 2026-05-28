@@ -7,9 +7,9 @@
 // Public API groups:
 //   Token inspection:  ps_peek_kind, ps_peek_ident, ps_peek_int, ...
 //   Token matching:    ps_check, ps_consume, ps_expect, ps_same_line
-//   AST constructors:  mk_expr_* (Box-wrapping variants), mk_type_list/dict/set, mk_variantdef_multi/positional
-//   Option helpers:    some_expr, none_expr, some_type, none_type, ...
-//   Utility:           split_block, names_to_pats, is_upper_first_str
+//   AST constructors:  mk_expr_slice/lambda/for/while, mk_variantdef_multi/positional
+//   Option helpers:    some_else, no_else
+//   Utility:           split_block, push_name_expr_pair, new_name_expr_pairs
 
 use std::cell::RefCell;
 
@@ -182,58 +182,10 @@ pub fn ps_advance_ident() -> String {
     }
 }
 
-/// Advance and return the kind string of the consumed token.
-pub fn ps_advance_kind() -> String {
-    if has_err_internal() {
-        return "Eof".to_string();
-    }
-    let t = peek_token_internal();
-    let k = token_kind_str(&t.kind);
-    advance_internal();
-    k
-}
-
-// ─── BinOp / UnOp from string ───────────────────────────────────────────────
-
-fn str_to_binop(s: &str) -> BinOp {
-    match s {
-        "Add" => BinOp::Add,
-        "Sub" => BinOp::Sub,
-        "Mul" => BinOp::Mul,
-        "Div" => BinOp::Div,
-        "Mod" => BinOp::Mod,
-        "Eq" => BinOp::Eq,
-        "Neq" => BinOp::Neq,
-        "Lt" => BinOp::Lt,
-        "Gt" => BinOp::Gt,
-        "Le" => BinOp::Le,
-        "Ge" => BinOp::Ge,
-        "And" => BinOp::And,
-        "Or" => BinOp::Or,
-        "In" => BinOp::In,
-        "NotIn" => BinOp::NotIn,
-        _ => panic!("str_to_binop: unknown '{}'", s),
-    }
-}
-
-fn str_to_unop(s: &str) -> UnOp {
-    match s {
-        "Not" => UnOp::Not,
-        "Neg" => UnOp::Neg,
-        _ => panic!("str_to_unop: unknown '{}'", s),
-    }
-}
-
 // ─── AST constructors: Expr ─────────────────────────────────────────────────
 
 pub fn mk_expr_char_from_str(s: String) -> Expr {
     Expr::Char(s.chars().next().unwrap_or('\0'))
-}
-pub fn mk_expr_field(base: Expr, name: String) -> Expr {
-    Expr::Field(Box::new(base), name)
-}
-pub fn mk_expr_index(base: Expr, idx: Expr) -> Expr {
-    Expr::Index(Box::new(base), Box::new(idx))
 }
 pub fn mk_expr_slice(
     base: Expr,
@@ -247,15 +199,6 @@ pub fn mk_expr_slice(
         to.map(Box::new),
         step.map(Box::new),
     )
-}
-pub fn mk_expr_binop(op: String, lhs: Expr, rhs: Expr) -> Expr {
-    Expr::BinOp(str_to_binop(&op), Box::new(lhs), Box::new(rhs))
-}
-pub fn mk_expr_unop(op: String, expr: Expr) -> Expr {
-    Expr::UnOp(str_to_unop(&op), Box::new(expr))
-}
-pub fn mk_expr_pipe(lhs: Expr, rhs: Expr) -> Expr {
-    Expr::Pipe(Box::new(lhs), Box::new(rhs))
 }
 pub fn mk_expr_lambda(
     params: Vec<Param>,
@@ -291,49 +234,11 @@ pub fn mk_expr_lambda_generics(
         final_expr: Box::new(final_expr),
     }
 }
-pub fn mk_expr_call(func: Expr, args: Vec<Expr>) -> Expr {
-    Expr::Call(Box::new(func), args)
-}
-pub fn mk_expr_if(
-    cond: Expr,
-    then_stmts: Vec<Stmt>,
-    then_expr: Expr,
-    else_clause: Option<(Vec<Stmt>, Box<Expr>)>,
-) -> Expr {
-    Expr::If(Box::new(cond), then_stmts, Box::new(then_expr), else_clause)
-}
-pub fn mk_expr_match(scrutinee: Expr, arms: Vec<MatchArm>) -> Expr {
-    Expr::Match(Box::new(scrutinee), arms)
-}
 pub fn mk_expr_for(var: String, iter: Expr, stmts: Vec<Stmt>, final_expr: Option<Expr>) -> Expr {
     Expr::For(var, Box::new(iter), stmts, final_expr.map(Box::new))
 }
 pub fn mk_expr_while(cond: Expr, stmts: Vec<Stmt>, final_expr: Option<Expr>) -> Expr {
     Expr::While(Box::new(cond), stmts, final_expr.map(Box::new))
-}
-pub fn mk_expr_block(stmts: Vec<Stmt>, final_expr: Expr) -> Expr {
-    Expr::Block(stmts, Box::new(final_expr))
-}
-pub fn mk_expr_break_none() -> Expr {
-    Expr::Break(std::option::Option::None)
-}
-pub fn mk_expr_try_unwrap(inner: Expr) -> Expr {
-    Expr::TryUnwrap(Box::new(inner))
-}
-pub fn mk_expr_early_return(val: Expr) -> Expr {
-    Expr::EarlyReturn(Box::new(val))
-}
-
-// ─── AST constructors: TypeExpr ─────────────────────────────────────────────
-
-pub fn mk_type_list(inner: TypeExpr) -> TypeExpr {
-    TypeExpr::List(Box::new(inner))
-}
-pub fn mk_type_dict(k: TypeExpr, v: TypeExpr) -> TypeExpr {
-    TypeExpr::Dict(Box::new(k), Box::new(v))
-}
-pub fn mk_type_set(inner: TypeExpr) -> TypeExpr {
-    TypeExpr::Set(Box::new(inner))
 }
 
 // ─── AST constructors: other ────────────────────────────────────────────────
@@ -355,25 +260,6 @@ pub fn mk_variantdef_positional(name: String, ftys: Vec<TypeExpr>) -> VariantDef
 }
 
 // ─── Option helpers ─────────────────────────────────────────────────────────
-
-pub fn some_expr(e: Expr) -> Option<Expr> {
-    Some(e)
-}
-pub fn none_expr() -> Option<Expr> {
-    std::option::Option::None
-}
-pub fn some_type(t: TypeExpr) -> Option<TypeExpr> {
-    Some(t)
-}
-pub fn none_type() -> Option<TypeExpr> {
-    std::option::Option::None
-}
-pub fn some_str(s: String) -> Option<String> {
-    Some(s)
-}
-pub fn none_str() -> Option<String> {
-    std::option::Option::None
-}
 
 /// Construct a Some else-clause for Expr::If.
 pub fn some_else(stmts: Vec<Stmt>, expr: Expr) -> Option<(Vec<Stmt>, Box<Expr>)> {
@@ -435,82 +321,6 @@ pub fn new_name_expr_pairs() -> Vec<(String, Expr)> {
 /// Create an empty Vec<(Expr, Expr)>.
 pub fn new_expr_pairs() -> Vec<(Expr, Expr)> {
     vec![]
-}
-
-/// Starting from a position right after `@` or `@!`, capture text until
-/// either (a) end-of-line at depth 0, or (b) all opened `()`, `[]`, `{}`
-/// have closed. Inside string literals `"..."` brackets are skipped and `\"`
-/// is respected. Trailing whitespace is trimmed from the returned string.
-///
-/// Return: (captured_body, new_byte_pos_in_src)
-/// Condition (a): pos points TO the `\n` (not consumed).
-/// Condition (b): pos advances past the immediately-following `\n` if present.
-pub fn capture_attr_body(src: &str, start: usize) -> (String, usize) {
-    let bytes = src.as_bytes();
-    let len = bytes.len();
-    let mut pos = start;
-    let mut depth: i32 = 0;
-    let mut in_string = false;
-    let mut buf: Vec<u8> = Vec::new();
-
-    while pos < len {
-        let b = bytes[pos];
-
-        if in_string {
-            buf.push(b);
-            if b == b'\\' && pos + 1 < len {
-                pos += 1;
-                buf.push(bytes[pos]);
-            } else if b == b'"' {
-                in_string = false;
-            }
-            pos += 1;
-            continue;
-        }
-
-        match b {
-            b'"' => {
-                in_string = true;
-                buf.push(b);
-                pos += 1;
-            }
-            b'(' | b'[' | b'{' => {
-                depth += 1;
-                buf.push(b);
-                pos += 1;
-            }
-            b')' | b']' | b'}' => {
-                if depth == 0 {
-                    break;
-                }
-                depth -= 1;
-                buf.push(b);
-                pos += 1;
-                if depth == 0 {
-                    // condition (b): all brackets closed — consume trailing \n
-                    if pos < len && bytes[pos] == b'\n' {
-                        pos += 1;
-                    }
-                    break;
-                }
-            }
-            b'\n' => {
-                if depth == 0 {
-                    // condition (a): stop, leave \n unconsumed
-                    break;
-                }
-                buf.push(b);
-                pos += 1;
-            }
-            _ => {
-                buf.push(b);
-                pos += 1;
-            }
-        }
-    }
-
-    let s = String::from_utf8(buf).expect("source is valid UTF-8");
-    (s.trim_end().to_string(), pos)
 }
 
 // ─── @! inner-attribute helpers ─────────────────────────────────────────────
@@ -678,28 +488,3 @@ pub fn parse(tokens: Vec<Token>) -> Result<Vec<Stmt>, String> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::capture_attr_body;
-
-    #[test]
-    fn capture_attr_body_parens() {
-        let (s, pos) = capture_attr_body("derive(Clone, Debug)\nFoo := ...", 0);
-        assert_eq!(s, "derive(Clone, Debug)");
-        assert_eq!(pos, 21);
-    }
-
-    #[test]
-    fn capture_attr_body_string_escape() {
-        let (s, pos) = capture_attr_body("cfg(any(unix, target_os = \"macos\"))\n...", 0);
-        assert_eq!(s, "cfg(any(unix, target_os = \"macos\"))");
-        let _ = pos;
-    }
-
-    #[test]
-    fn capture_attr_body_plain() {
-        let (s, pos) = capture_attr_body("inline\n", 0);
-        assert_eq!(s, "inline");
-        assert_eq!(pos, 6);
-    }
-}

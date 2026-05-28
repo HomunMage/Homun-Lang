@@ -235,11 +235,9 @@ check_expr := (env: Scope, expr: Expr) -> @[str] {
     env_final := stmts_bound(env2, lam_stmts)
     => errs_join(mixing_errs, errs_join(lam_errs, check_expr(env_final, fe)))
   }
-  // Box<Expr>-bearing variants (Field/Index/BinOp/Pipe/Match/etc.) keep
-  // accessor calls because Expr is defined in ast.hom and the bootstrap can't
-  // see its variant_field_types — F8b auto-deref doesn't apply cross-file.
-  // e_dispatch is a clone that match consumes; accessors below run on the
-  // original `expr` parameter, which remains in scope.
+  // Most arms use direct positional bindings (F9 cross-file auto-deref).
+  // Remaining accessor calls: Option<Box<Expr>> fields (Slice from/to/step,
+  // If else, For/While final, Break) where F9 can't auto-deref through Option.
   e_dispatch := expr
   match e_dispatch {
     Expr.Var(name) -> {
@@ -249,10 +247,10 @@ check_expr := (env: Scope, expr: Expr) -> @[str] {
         errs_one("SEMA ERROR: undefined reference '${name}'")
       }
     }
-    Expr.Field(_, _) -> check_expr(env, expr_field_expr(expr))
-    Expr.Index(_, _) -> errs_join(check_expr(env, expr_index_expr(expr)), check_expr(env, expr_index_idx(expr)))
-    Expr.Slice(_, _, _, _) -> {
-      base_errs := check_expr(env, expr_slice_expr(expr))
+    Expr.Field(base, _) -> check_expr(env, base)
+    Expr.Index(base, idx) -> errs_join(check_expr(env, base), check_expr(env, idx))
+    Expr.Slice(sl_base, _, _, _) -> {
+      base_errs := check_expr(env, sl_base)
       from_opt  := expr_slice_from(expr)
       to_opt    := expr_slice_to(expr)
       step_opt  := expr_slice_step(expr)
@@ -322,12 +320,11 @@ check_expr := (env: Scope, expr: Expr) -> @[str] {
       }
       errs
     }
-    Expr.BinOp(_, _, _) -> errs_join(check_expr(env, expr_binop_lhs(expr)), check_expr(env, expr_binop_rhs(expr)))
-    Expr.Pipe(_, _) -> errs_join(check_expr(env, expr_pipe_lhs(expr)), check_expr(env, expr_pipe_rhs(expr)))
-    Expr.UnOp(_, _) -> check_expr(env, expr_unop_expr(expr))
-    Expr.Call(_, _) -> {
-      f_errs := check_expr(env, expr_call_func(expr))
-      args := expr_call_args(expr)
+    Expr.BinOp(_, lhs, rhs) -> errs_join(check_expr(env, lhs), check_expr(env, rhs))
+    Expr.Pipe(lhs, rhs) -> errs_join(check_expr(env, lhs), check_expr(env, rhs))
+    Expr.UnOp(_, e) -> check_expr(env, e)
+    Expr.Call(f, args) -> {
+      f_errs := check_expr(env, f)
       an := len(args)
       ai := 0
       arg_errs := errs_empty()
@@ -337,9 +334,9 @@ check_expr := (env: Scope, expr: Expr) -> @[str] {
       }
       errs_join(f_errs, arg_errs)
     }
-    Expr.If(_, _, _, _) -> {
-      cond_errs  := check_expr(env, expr_if_cond(expr))
-      then_errs  := errs_join(check_stmts(env, expr_if_then_stmts(expr)), check_expr(env, expr_if_then_expr(expr)))
+    Expr.If(cond, then_stmts, then_expr, _) -> {
+      cond_errs  := check_expr(env, cond)
+      then_errs  := errs_join(check_stmts(env, then_stmts), check_expr(env, then_expr))
       else_errs  := if (expr_if_has_else(expr)) {
         errs_join(check_stmts(env, expr_if_else_stmts(expr)), check_expr(env, expr_if_else_expr(expr)))
       } else {
@@ -347,9 +344,8 @@ check_expr := (env: Scope, expr: Expr) -> @[str] {
       }
       errs_join(cond_errs, errs_join(then_errs, else_errs))
     }
-    Expr.Match(_, _) -> {
-      sc_errs := check_expr(env, expr_match_scrutinee(expr))
-      arms := expr_match_arms(expr)
+    Expr.Match(scrut, arms) -> {
+      sc_errs := check_expr(env, scrut)
       an := len(arms)
       ai := 0
       arm_errs := errs_empty()
@@ -359,10 +355,7 @@ check_expr := (env: Scope, expr: Expr) -> @[str] {
       }
       errs_join(sc_errs, arm_errs)
     }
-    Expr.For(_, _, _, _) -> {
-      v          := expr_for_var(expr)
-      iter       := expr_for_iter(expr)
-      body_stmts := expr_for_stmts(expr)
+    Expr.For(v, iter, body_stmts, _) -> {
       fe_opt     := expr_for_final(expr)
       env2       := scope_clone(env)
       env2       := scope_insert(env2, v)
@@ -375,9 +368,7 @@ check_expr := (env: Scope, expr: Expr) -> @[str] {
       }
       errs_join(iter_errs, errs_join(body_errs, fe_errs))
     }
-    Expr.While(_, _, _) -> {
-      cond       := expr_while_cond(expr)
-      body_stmts := expr_while_stmts(expr)
+    Expr.While(cond, body_stmts, _) -> {
       fe_opt     := expr_while_final(expr)
       cond_errs  := check_expr(env, cond)
       body_errs  := check_stmts(env, body_stmts)
@@ -388,9 +379,7 @@ check_expr := (env: Scope, expr: Expr) -> @[str] {
       }
       errs_join(cond_errs, errs_join(body_errs, fe_errs))
     }
-    Expr.Block(_, _) -> {
-      body_stmts := expr_block_stmts(expr)
-      fe         := expr_block_final(expr)
+    Expr.Block(body_stmts, fe) -> {
       body_errs  := check_stmts(env, body_stmts)
       env_final  := stmts_bound(env, body_stmts)
       errs_join(body_errs, check_expr(env_final, fe))
@@ -402,10 +391,10 @@ check_expr := (env: Scope, expr: Expr) -> @[str] {
         Some(e) -> check_expr(env, e)
       }
     }
-    Expr.EarlyReturn(_) -> check_expr(env, expr_earlyreturn_val(expr))
-    Expr.LoadRon(_, _) -> check_expr(env, expr_loadron_path(expr))
-    Expr.SaveRon(_, _) -> errs_join(check_expr(env, expr_saveron_data(expr)), check_expr(env, expr_saveron_path(expr)))
-    Expr.TryUnwrap(_) -> check_expr(env, expr_tryunwrap_expr(expr))
+    Expr.EarlyReturn(val) -> check_expr(env, val)
+    Expr.LoadRon(path, _) -> check_expr(env, path)
+    Expr.SaveRon(data, path) -> errs_join(check_expr(env, data), check_expr(env, path))
+    Expr.TryUnwrap(inner) -> check_expr(env, inner)
     _ -> errs_empty()
   }
 }

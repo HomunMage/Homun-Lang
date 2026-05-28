@@ -6,6 +6,19 @@ Branches: `history` (spec drafts), `haskell` (Haskell compiler), `rust` (Rust re
 
 ---
 
+### v0.90 — 2026-05-28 — Migration via `--import`: drop ~30 accessor helpers, direct `Expr.*` construction (stage 2)
+
+Cashed in the v0.89 `--import` bootstrap by migrating the three remaining compiler modules to direct match destructures and direct enum construction. Net diff: **+142 / −625** across 6 files (~480 lines removed).
+
+- `build.rs`: now passes `--import src/ast.hom` when compiling every other `.hom` file, so codegen knows `Expr`/`TypeExpr` variant field types cross-file (F9 match auto-deref + F12 construct auto-wrap)
+- `parser.hom`: replaced ~25 `mk_expr_*` / `mk_type_*` / `some_expr` wrapper calls with direct `Expr.Field(base, name)` / `Expr.BinOp(BinOp.Eq, lhs, rhs)` / `Some(...)` literals — F12 emits `Box::new` at construct sites automatically
+- `parser_imp.rs`: deleted 23 `mk_expr_*` / `mk_type_*` / `some_*` / `none_*` constructor helpers (−221 lines)
+- `codegen.hom` + `sema.hom`: replaced ~25 `expr_*` accessor calls (`expr_field_expr`, `expr_binop_lhs`, `expr_for_var`, `expr_block_stmts`, …) with direct positional bindings in match arms
+- `dep/codegen_helpers.rs`: deleted ~30 zero-caller `expr_*` / `type_*` accessor helpers (−245 lines); kept `expr_is_lambda` for the Lambda early-out (named fields can't be positionally bound)
+- 147 tests pass, `cargo fmt` + `cargo clippy --release -- -D warnings` clean
+
+---
+
 ### v0.89 — 2026-05-28 — `--import` flag for cross-file enum awareness (stage 1)
 
 Stage-1 bootstrap: ship the `--import` infrastructure compiling cleanly from the v0.88 bootstrap. Stage 2 (v0.90) will use the new homunc to migrate `parser.hom`/`codegen.hom`/`sema.hom` from `mk_expr_*` / `expr_*` accessors to direct `Expr.*` construction and direct match destructures.

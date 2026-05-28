@@ -97,6 +97,7 @@ register_external_types := (stmts: @[Stmt]) -> _ {
   }
 }
 
+
 register_fn_sig := (name: str, params: @[Param]) -> _ {
   flags := @[]
   defaults := @[]
@@ -244,14 +245,14 @@ codegen_type := (ty: TypeExpr) -> str {
         _       -> n
       }
     }
-    TypeExpr.List(_) -> "Vec<" + codegen_type(type_list_inner(ty)) + ">"
-    TypeExpr.Dict(_, _) -> {
-      ks := codegen_type(type_dict_key(ty))
-      vs := codegen_type(type_dict_val(ty))
+    TypeExpr.List(inner) -> "Vec<" + codegen_type(inner) + ">"
+    TypeExpr.Dict(k, v) -> {
+      ks := codegen_type(k)
+      vs := codegen_type(v)
       "std::collections::HashMap<" + ks + ", " + vs + ">"
     }
-    TypeExpr.Set(_) -> "std::collections::HashSet<" + codegen_type(type_set_inner(ty)) + ">"
-    TypeExpr.Option(_) -> "Option<" + codegen_type(type_option_inner(ty)) + ">"
+    TypeExpr.Set(inner) -> "std::collections::HashSet<" + codegen_type(inner) + ">"
+    TypeExpr.Option(inner) -> "Option<" + codegen_type(inner) + ">"
     TypeExpr.Tuple(ts) -> {
       parts := @[]
       ti := 0
@@ -289,8 +290,8 @@ codegen_type_variant_field := (ty: TypeExpr) -> str {
         codegen_type(ty)
       }
     }
-    TypeExpr.Option(_) -> {
-      "Option<" + codegen_type_variant_field(type_option_inner(ty)) + ">"
+    TypeExpr.Option(inner) -> {
+      "Option<" + codegen_type_variant_field(inner) + ">"
     }
     TypeExpr.Generic(gn, gps) -> {
       if (gn == "Option" and len(gps) == 1) {
@@ -456,8 +457,8 @@ cg_lvalue := (i: int, sc: Scope, e: Expr) -> str {
   e_d := e
   match e_d {
     Expr.Var(n) -> n
-    Expr.Field(_, _) -> cg_lvalue(i, sc, expr_field_expr(e)) + "." + expr_field_name(e)
-    Expr.Index(_, _) -> cg_lvalue(i, sc, expr_index_expr(e)) + "[" + cg_expr(i, sc, expr_index_idx(e)) + " as usize]"
+    Expr.Field(base, name) -> cg_lvalue(i, sc, base) + "." + name
+    Expr.Index(base, idx) -> cg_lvalue(i, sc, base) + "[" + cg_expr(i, sc, idx) + " as usize]"
     _ -> cg_expr(i, sc, e)
   }
 }
@@ -538,7 +539,7 @@ walk_pat_box_names := (pat: Pat, ty: TypeExpr, enum_name: str) -> @[str] {
       if (is_some) {
         ty_d := ty
         match ty_d {
-          TypeExpr.Option(_) -> walk_pat_box_names(inner[0], type_option_inner(ty), enum_name)
+          TypeExpr.Option(opt_inner) -> walk_pat_box_names(inner[0], opt_inner, enum_name)
           TypeExpr.Generic(gn, gps) -> {
             if (gn == "Option" and len(gps) == 1) {
               walk_pat_box_names(inner[0], gps[0], enum_name)
@@ -631,9 +632,7 @@ cg_struct_val := (i: int, sc: Scope, e: Expr) -> str {
 detect_variant_qual := (f: Expr) -> str {
   fd := f
   match fd {
-    Expr.Field(_, _) -> {
-      base := expr_field_expr(f)
-      name := expr_field_name(f)
+    Expr.Field(base, name) -> {
       bd := base
       match bd {
         Expr.Var(en) -> {
@@ -851,7 +850,7 @@ cg_arm := (i: int, sc: Scope, arm: MatchArm) -> str {
 cg_expr := (i: int, sc: Scope, expr: Expr) -> str {
   // Lambda has named-field variant — can't destructure positionally in Homun
   // patterns, so handle it via accessor before the direct match.
-  if (expr_kind(expr) == "Lambda") {
+  if (expr_is_lambda(expr)) {
     params := expr_lambda_params(expr)
     lam_stmts := expr_lambda_stmts(expr)
     fe := expr_lambda_final(expr)
@@ -872,11 +871,10 @@ cg_expr := (i: int, sc: Scope, expr: Expr) -> str {
     body_lines := cg_body(i + 1, inner_sc, lam_stmts, fe)
     => "|" + param_str + "| {\n" + join(body_lines, "\n") + "\n" + ind(i) + "}"
   }
-  // Box<Expr>-bearing variants (Field/Index/BinOp/Pipe/Match/etc.) historically
-  // used accessor calls (expr_field_expr, expr_binop_lhs, etc.) — predating F9.
-  // F9 cross-file Box<T> auto-deref now makes direct positional bindings safe;
-  // these accessors are pending migration. e_dispatch clones for match consume;
-  // remaining accessor calls operate on the original `expr` parameter.
+  // Most arms now use direct positional bindings (F9 cross-file auto-deref).
+  // Remaining accessor calls: BinOp/UnOp op (string format), Option<Box<Expr>>
+  // fields (Slice from/to/step, If else, For/While final, Break, Range) where
+  // F9 can't auto-deref through Option. These operate on the original `expr`.
   e_dispatch := expr
   match e_dispatch {
     Expr.Int(n) -> str(n)
@@ -905,20 +903,19 @@ cg_expr := (i: int, sc: Scope, expr: Expr) -> str {
         }
       }
     }
-    Expr.Field(_, _) -> {
-      base := cg_expr(i, sc, expr_field_expr(expr))
-      field := expr_field_name(expr)
+    Expr.Field(base_expr, field) -> {
+      base := cg_expr(i, sc, base_expr)
       if (is_upper_first(base)) {
         base + "::" + field
       } else {
         base + "." + field
       }
     }
-    Expr.Index(_, _) -> {
-      cg_expr(i, sc, expr_index_expr(expr)) + ".homun_idx(" + cg_expr(i, sc, expr_index_idx(expr)) + ")"
+    Expr.Index(idx_base, idx) -> {
+      cg_expr(i, sc, idx_base) + ".homun_idx(" + cg_expr(i, sc, idx) + ")"
     }
-    Expr.Slice(_, _, _, _) -> {
-      base_s := cg_expr(i, sc, expr_slice_expr(expr))
+    Expr.Slice(sl_base, _, _, _) -> {
+      base_s := cg_expr(i, sc, sl_base)
       from_opt := expr_slice_from(expr)
       to_opt := expr_slice_to(expr)
       step_opt := expr_slice_step(expr)
@@ -973,24 +970,19 @@ cg_expr := (i: int, sc: Scope, expr: Expr) -> str {
         }
       }
     }
-    Expr.BinOp(_, _, _) -> {
+    Expr.BinOp(_, lhs, rhs) -> {
       op := expr_binop_op(expr)
-      lhs := expr_binop_lhs(expr)
-      rhs := expr_binop_rhs(expr)
       cg_bin_op(i, sc, op, lhs, rhs)
     }
-    Expr.UnOp(_, _) -> {
+    Expr.UnOp(_, e) -> {
       op := expr_unop_op(expr)
-      e := expr_unop_expr(expr)
       if (op == "Not") {
         "!" + cg_expr(i, sc, e)
       } else {
         "-" + cg_expr(i, sc, e)
       }
     }
-    Expr.Pipe(_, _) -> {
-      lhs := expr_pipe_lhs(expr)
-      rhs := expr_pipe_rhs(expr)
+    Expr.Pipe(lhs, rhs) -> {
       if (expr_kind(rhs) == "Call") {
         f := expr_call_func(rhs)
         args := expr_call_args(rhs)
@@ -1016,9 +1008,7 @@ cg_expr := (i: int, sc: Scope, expr: Expr) -> str {
         cg_expr(i, sc, rhs) + "(" + cg_expr(i, sc, lhs) + ")"
       }
     }
-    Expr.Call(_, _) -> {
-      f := expr_call_func(expr)
-      args := expr_call_args(expr)
+    Expr.Call(f, args) -> {
       if (expr_kind(f) == "Var") {
         fname := expr_var_name(f)
         if (fname == "print") {
@@ -1040,10 +1030,7 @@ cg_expr := (i: int, sc: Scope, expr: Expr) -> str {
         cg_general_call(i, sc, f, args)
       }
     }
-    Expr.If(_, _, _, _) -> {
-      cond := expr_if_cond(expr)
-      then_stmts := expr_if_then_stmts(expr)
-      then_fe := expr_if_then_expr(expr)
+    Expr.If(cond, then_stmts, then_fe, _) -> {
       then_lines := cg_body(i + 1, sc, then_stmts, then_fe)
       has_else := expr_if_has_else(expr)
       else_str := if (has_else) {
@@ -1056,9 +1043,7 @@ cg_expr := (i: int, sc: Scope, expr: Expr) -> str {
       }
       "if " + cg_expr(i, sc, cond) + " {\n" + join(then_lines, "\n") + "\n" + ind(i) + "}" + else_str
     }
-    Expr.Match(_, _) -> {
-      scrut := expr_match_scrutinee(expr)
-      arms := expr_match_arms(expr)
+    Expr.Match(scrut, arms) -> {
       n := len(arms)
       arm_strs := @[]
       ai := 0
@@ -1073,16 +1058,11 @@ cg_expr := (i: int, sc: Scope, expr: Expr) -> str {
       }
       "match " + scrut_s + " {\n" + join(arm_strs, "\n") + "\n" + ind(i) + "}"
     }
-    Expr.Block(_, _) -> {
-      stmts := expr_block_stmts(expr)
-      fe := expr_block_final(expr)
+    Expr.Block(stmts, fe) -> {
       body_lines := cg_body(i + 1, sc, stmts, fe)
       "{\n" + join(body_lines, "\n") + "\n" + ind(i) + "}"
     }
-    Expr.For(_, _, _, _) -> {
-      var := expr_for_var(expr)
-      iter := expr_for_iter(expr)
-      body_stmts := expr_for_stmts(expr)
+    Expr.For(var, iter, body_stmts, _) -> {
       fe_opt := expr_for_final(expr)
       sc0 := scope_clone(sc)
       sc0 := scope_insert(sc0, var)
@@ -1099,9 +1079,7 @@ cg_expr := (i: int, sc: Scope, expr: Expr) -> str {
       }
       "for " + var + " in " + cg_expr(i, sc, iter) + " {\n" + join(body_lines, "\n") + "\n" + ind(i) + "}"
     }
-    Expr.While(_, _, _) -> {
-      cond := expr_while_cond(expr)
-      body_stmts := expr_while_stmts(expr)
+    Expr.While(cond, body_stmts, _) -> {
       fe_opt := expr_while_final(expr)
       body_sc := scope_clone(sc)
       body_lines, body_sc2 := cg_stmts(i + 1, body_sc, body_stmts)
@@ -1122,21 +1100,16 @@ cg_expr := (i: int, sc: Scope, expr: Expr) -> str {
       }
     }
     Expr.Continue -> "continue"
-    Expr.LoadRon(_, _) -> {
-      path := expr_loadron_path(expr)
-      ty := expr_loadron_type(expr)
+    Expr.LoadRon(path, ty) -> {
       "ron::from_str::<" + codegen_type(ty) + ">(&std::fs::read_to_string(" + cg_expr(i, sc, path) + ").unwrap()).unwrap()"
     }
-    Expr.SaveRon(_, _) -> {
-      data := expr_saveron_data(expr)
-      path := expr_saveron_path(expr)
+    Expr.SaveRon(data, path) -> {
       "std::fs::write(" + cg_expr(i, sc, path) + ", ron::to_string(&" + cg_expr(i, sc, data) + ").unwrap()).unwrap()"
     }
-    Expr.EarlyReturn(_) -> {
-      val := expr_earlyreturn_val(expr)
+    Expr.EarlyReturn(val) -> {
       "return " + cg_expr(i, sc, val)
     }
-    Expr.TryUnwrap(_) -> cg_expr(i, sc, expr_tryunwrap_expr(expr)) + "?"
+    Expr.TryUnwrap(inner) -> cg_expr(i, sc, inner) + "?"
     Expr.Range(_, _, _) -> {
       start_opt := expr_range_start(expr)
       end_opt := expr_range_end(expr)
@@ -1229,7 +1202,7 @@ cg_bind_common := (i: int, sc: Scope, name: str, e: Expr) -> str {
   if (is_thread_local_var(name)) {
     => "${ind(i)}${name}_set(${cg_struct_val(i, sc, e)});"
   }
-  if (expr_kind(e) == "Lambda") {
+  if (expr_is_lambda(e)) {
     params := expr_lambda_params(e)
     lam_stmts := expr_lambda_stmts(e)
     fe2 := expr_lambda_final(e)
@@ -1543,7 +1516,7 @@ infer_const_ty := (e: Expr) -> str {
 // Pass attrs:=@[] for BindMut callers (BindMut carries no attrs).
 
 cg_top_bind := (i: int, name: str, e: Expr, attrs: @[str]) -> str {
-  if (expr_kind(e) == "Lambda") {
+  if (expr_is_lambda(e)) {
     params := expr_lambda_params(e)
     ret_ty := expr_lambda_ret_ty(e)
     void_mark := expr_lambda_void_mark(e)

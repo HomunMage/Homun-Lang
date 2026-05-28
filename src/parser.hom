@@ -188,7 +188,7 @@ parse_brace_fields := () -> @[FieldDef] {
         ps_expect("Colon")
         ty := parse_type_expr()
         ps_consume("Comma")
-        push(fields, FieldDef { name: name, ty: some_type(ty) })
+        push(fields, FieldDef { name: name, ty: Some(ty) })
       } else {
         done := true
       }
@@ -274,7 +274,7 @@ parse_block_stmts := () -> @[Stmt] {
       if (k == "FatArrow") {
         ps_advance()
         e := parse_expr()
-        push(stmts, Stmt.Expression(mk_expr_early_return(e)))
+        push(stmts, Stmt.Expression(Expr.EarlyReturn(e)))
       } else {
         if (k == "LBrace") {
           // Try struct destructure: {x: a, y: b} := expr
@@ -378,7 +378,7 @@ try_parse_struct_destruct := () -> @[Stmt] {
   push(result, Stmt.Bind(tmp_name, rhs, @[]))
   i := 0
   while (i < len(fields)) {
-    field_expr := mk_expr_field(Expr.Var(tmp_name), fields[i])
+    field_expr := Expr.Field(Expr.Var(tmp_name), fields[i])
     push(result, Stmt.Bind(bindings[i], field_expr, @[]))
     i := i + 1
   }
@@ -479,7 +479,7 @@ parse_pipe := () -> Expr {
   while (ps_check("Pipe")) {
     ps_advance()
     rhs := parse_postfix()
-    lhs ::= mk_expr_pipe(lhs, rhs)
+    lhs ::= Expr.Pipe(lhs, rhs)
   }
   lhs
 }
@@ -489,7 +489,7 @@ parse_or := () -> Expr {
   while (ps_check("Or")) {
     ps_advance()
     rhs := parse_and()
-    lhs ::= mk_expr_binop("Or", lhs, rhs)
+    lhs ::= Expr.BinOp(BinOp.Or, lhs, rhs)
   }
   lhs
 }
@@ -499,7 +499,7 @@ parse_and := () -> Expr {
   while (ps_check("And")) {
     ps_advance()
     rhs := parse_not()
-    lhs ::= mk_expr_binop("And", lhs, rhs)
+    lhs ::= Expr.BinOp(BinOp.And, lhs, rhs)
   }
   lhs
 }
@@ -508,7 +508,7 @@ parse_not := () -> Expr {
   if (ps_check("Not")) {
     ps_advance()
     e := parse_not()
-    mk_expr_unop("Not", e)
+    Expr.UnOp(UnOp.Not, e)
   } else {
     parse_cmp()
   }
@@ -517,19 +517,19 @@ parse_not := () -> Expr {
 parse_cmp := () -> Expr {
   lhs := parse_add_sub()
   k := ps_peek_kind()
-  if (k == "Eq") { ps_advance()  rhs := parse_add_sub()  mk_expr_binop("Eq", lhs, rhs) }
-  else { if (k == "Neq") { ps_advance()  rhs := parse_add_sub()  mk_expr_binop("Neq", lhs, rhs) }
-  else { if (k == "Lt") { ps_advance()  rhs := parse_add_sub()  mk_expr_binop("Lt", lhs, rhs) }
-  else { if (k == "Gt") { ps_advance()  rhs := parse_add_sub()  mk_expr_binop("Gt", lhs, rhs) }
-  else { if (k == "Le") { ps_advance()  rhs := parse_add_sub()  mk_expr_binop("Le", lhs, rhs) }
-  else { if (k == "Ge") { ps_advance()  rhs := parse_add_sub()  mk_expr_binop("Ge", lhs, rhs) }
-  else { if (k == "In") { ps_advance()  rhs := parse_add_sub()  mk_expr_binop("In", lhs, rhs) }
+  if (k == "Eq") { ps_advance()  rhs := parse_add_sub()  Expr.BinOp(BinOp.Eq, lhs, rhs) }
+  else { if (k == "Neq") { ps_advance()  rhs := parse_add_sub()  Expr.BinOp(BinOp.Neq, lhs, rhs) }
+  else { if (k == "Lt") { ps_advance()  rhs := parse_add_sub()  Expr.BinOp(BinOp.Lt, lhs, rhs) }
+  else { if (k == "Gt") { ps_advance()  rhs := parse_add_sub()  Expr.BinOp(BinOp.Gt, lhs, rhs) }
+  else { if (k == "Le") { ps_advance()  rhs := parse_add_sub()  Expr.BinOp(BinOp.Le, lhs, rhs) }
+  else { if (k == "Ge") { ps_advance()  rhs := parse_add_sub()  Expr.BinOp(BinOp.Ge, lhs, rhs) }
+  else { if (k == "In") { ps_advance()  rhs := parse_add_sub()  Expr.BinOp(BinOp.In, lhs, rhs) }
   else { if (k == "Not") {
     if (ps_same_line()) {
       ps_advance()
       ps_expect("In")
       rhs := parse_add_sub()
-      mk_expr_binop("NotIn", lhs, rhs)
+      Expr.BinOp(BinOp.NotIn, lhs, rhs)
     } else {
       lhs
     }
@@ -546,12 +546,12 @@ parse_add_sub := () -> Expr {
     if (k == "Plus") {
       ps_advance()
       rhs := parse_mul_div()
-      lhs ::= mk_expr_binop("Add", lhs, rhs)
+      lhs ::= Expr.BinOp(BinOp.Add, lhs, rhs)
     } else {
       if (k == "Minus") {
         ps_advance()
         rhs := parse_mul_div()
-        lhs ::= mk_expr_binop("Sub", lhs, rhs)
+        lhs ::= Expr.BinOp(BinOp.Sub, lhs, rhs)
       } else {
         done := true
       }
@@ -568,17 +568,17 @@ parse_mul_div := () -> Expr {
     if (k == "Star") {
       ps_advance()
       rhs := parse_unary()
-      lhs ::= mk_expr_binop("Mul", lhs, rhs)
+      lhs ::= Expr.BinOp(BinOp.Mul, lhs, rhs)
     } else {
       if (k == "Slash") {
         ps_advance()
         rhs := parse_unary()
-        lhs ::= mk_expr_binop("Div", lhs, rhs)
+        lhs ::= Expr.BinOp(BinOp.Div, lhs, rhs)
       } else {
         if (k == "Percent") {
           ps_advance()
           rhs := parse_unary()
-          lhs ::= mk_expr_binop("Mod", lhs, rhs)
+          lhs ::= Expr.BinOp(BinOp.Mod, lhs, rhs)
         } else {
           done := true
         }
@@ -592,7 +592,7 @@ parse_unary := () -> Expr {
   if (ps_check("Minus")) {
     ps_advance()
     e := parse_unary()
-    mk_expr_unop("Neg", e)
+    Expr.UnOp(UnOp.Neg, e)
   } else {
     parse_postfix()
   }
@@ -608,9 +608,9 @@ parse_postfix := () -> Expr {
       fname := ps_advance_ident()
       if (ps_check("LParen")) {
         args := parse_arg_list()
-        e ::= mk_expr_call(mk_expr_field(e, fname), args)
+        e ::= Expr.Call(Expr.Field(e, fname), args)
       } else {
-        e ::= mk_expr_field(e, fname)
+        e ::= Expr.Field(e, fname)
       }
     } else {
       if (k == "LBracket" and ps_same_line()) {
@@ -621,32 +621,32 @@ parse_postfix := () -> Expr {
           // Slice with no start: [:end] or [:end:step] or [:]
           ps_advance()
           to := parse_opt_slice_expr()
-          step := if (ps_consume("Colon")) { parse_opt_slice_expr() } else { none_expr() }
+          step := if (ps_consume("Colon")) { parse_opt_slice_expr() } else { none }
           ps_expect("RBracket")
-          e ::= mk_expr_slice(e, none_expr(), to, step)
+          e ::= mk_expr_slice(e, none, to, step)
         } else {
           idx := parse_expr()
           if (ps_check("Colon")) {
             // Slice with start: [start:end] or [start:end:step]
             ps_advance()
             to := parse_opt_slice_expr()
-            step := if (ps_consume("Colon")) { parse_opt_slice_expr() } else { none_expr() }
+            step := if (ps_consume("Colon")) { parse_opt_slice_expr() } else { none }
             ps_expect("RBracket")
-            e ::= mk_expr_slice(e, some_expr(idx), to, step)
+            e ::= mk_expr_slice(e, Some(idx), to, step)
           } else {
             // Index
             ps_expect("RBracket")
-            e ::= mk_expr_index(e, idx)
+            e ::= Expr.Index(e, idx)
           }
         }
       } else {
         if (k == "LParen" and ps_same_line()) {
           args := parse_arg_list()
-          e ::= mk_expr_call(e, args)
+          e ::= Expr.Call(e, args)
         } else {
           if (k == "Question") {
             ps_advance()
-            e ::= mk_expr_try_unwrap(e)
+            e ::= Expr.TryUnwrap(e)
           } else {
             done := true
           }
@@ -660,9 +660,9 @@ parse_postfix := () -> Expr {
 parse_opt_slice_expr := () -> Option<Expr> {
   k := ps_peek_kind()
   if (k == "RBracket" or k == "Colon") {
-    none_expr()
+    none
   } else {
-    some_expr(parse_expr())
+    Some(parse_expr())
   }
 }
 
@@ -739,7 +739,7 @@ parse_atom := () -> Expr {
     ps_advance()
     if (ps_check("LBrace") and is_upper(name)) {
       fields := parse_struct_lit_fields()
-      => Expr.Struct(some_str(name), fields)
+      => Expr.Struct(Some(name), fields)
     }
     => Expr.Var(name)
   }
@@ -788,16 +788,16 @@ try_parse_lambda := () -> Expr {
   // Return type
   rk := ps_peek_kind()
   ret_ty := if (rk == "LBrace") {
-    none_type()
+    none
   } else {
     if (rk == "Underscore") {
       ps_advance()
-      none_type()
+      none
     } else {
-      some_type(parse_type_expr())
+      Some(parse_type_expr())
     }
   }
-  void_mark := if (rk == "Underscore") { some_type(TypeExpr.Void) } else { none_type() }
+  void_mark := if (rk == "Underscore") { Some(TypeExpr.Void) } else { none }
   stmts := parse_block_stmts_braced()
   ss, fe := split_block(stmts)
   mk_expr_lambda(params, ret_ty, void_mark, ss, fe)
@@ -822,26 +822,26 @@ parse_one_param := () -> Param {
   k := ps_peek_kind()
   if (k == "Underscore") {
     ps_advance()
-    => Param { name: "_", ty: none_type(), mutable: false, default: none_expr() }
+    => Param { name: "_", ty: none, mutable: false, default: none }
   }
   name := ps_advance_ident()
   // name::Type — mutable param
   if (ps_consume("DoubleColon")) {
     ty := parse_type_expr()
-    => Param { name: name, ty: some_type(ty), mutable: true, default: none_expr() }
+    => Param { name: name, ty: Some(ty), mutable: true, default: none }
   }
   // name:=expr — default param
   if (ps_consume("Assign")) {
     default := parse_expr()
-    => Param { name: name, ty: none_type(), mutable: false, default: some_expr(default) }
+    => Param { name: name, ty: none, mutable: false, default: Some(default) }
   }
   // name:Type — typed param
   if (ps_consume("Colon")) {
     ty := parse_type_expr()
-    => Param { name: name, ty: some_type(ty), mutable: false, default: none_expr() }
+    => Param { name: name, ty: Some(ty), mutable: false, default: none }
   }
   // name — untyped param
-  Param { name: name, ty: none_type(), mutable: false, default: none_expr() }
+  Param { name: name, ty: none, mutable: false, default: none }
 }
 
 parse_arg_list := () -> @[Expr] {
@@ -970,7 +970,7 @@ parse_if_expr := () -> Expr {
   } else {
     no_else()
   }
-  mk_expr_if(cond, ts, te, else_clause)
+  Expr.If(cond, ts, te, else_clause)
 }
 
 parse_match_expr := () -> Expr {
@@ -982,7 +982,7 @@ parse_match_expr := () -> Expr {
     push(arms, parse_match_arm())
   }
   ps_expect("RBrace")
-  mk_expr_match(scrut, arms)
+  Expr.Match(scrut, arms)
 }
 
 parse_match_arm := () -> MatchArm {
@@ -1000,9 +1000,9 @@ parse_match_arm := () -> MatchArm {
   }
   guard := if (ps_check("If")) {
     ps_advance()
-    some_expr(parse_expr())
+    Some(parse_expr())
   } else {
-    none_expr()
+    none
   }
   ps_expect("Arrow")
   body := parse_expr()
@@ -1151,7 +1151,7 @@ parse_for_expr := () -> Expr {
   iter := parse_expr()
   stmts := parse_block_stmts_braced()
   ss, fe := split_block(stmts)
-  mk_expr_for(var_name, iter, ss, some_expr(fe))
+  mk_expr_for(var_name, iter, ss, Some(fe))
 }
 
 parse_while_expr := () -> Expr {
@@ -1161,18 +1161,18 @@ parse_while_expr := () -> Expr {
   ps_expect("RParen")
   stmts := parse_block_stmts_braced()
   ss, fe := split_block(stmts)
-  mk_expr_while(cond, ss, some_expr(fe))
+  mk_expr_while(cond, ss, Some(fe))
 }
 
 parse_break_expr := () -> Expr {
   ps_expect("Break")
-  mk_expr_break_none()
+  Expr.Break(none)
 }
 
 parse_inline_block := () -> Expr {
   stmts := parse_block_stmts_braced()
   ss, fe := split_block(stmts)
-  mk_expr_block(ss, fe)
+  Expr.Block(ss, fe)
 }
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -1186,7 +1186,7 @@ parse_type_expr := () -> TypeExpr {
       ps_advance()
       ty := parse_type_expr()
       ps_expect("RBracket")
-      => mk_type_list(ty)
+      => TypeExpr.List(ty)
     }
     if (ak == "LBrace") {
       ps_advance()
@@ -1194,13 +1194,13 @@ parse_type_expr := () -> TypeExpr {
       ps_expect("Colon")
       vty := parse_type_expr()
       ps_expect("RBrace")
-      => mk_type_dict(kty, vty)
+      => TypeExpr.Dict(kty, vty)
     }
     if (ak == "LParen") {
       ps_advance()
       ty := parse_type_expr()
       ps_expect("RParen")
-      => mk_type_set(ty)
+      => TypeExpr.Set(ty)
     }
     => TypeExpr.Infer
   }
@@ -1251,16 +1251,16 @@ parse_generic_lambda := () -> Expr {
   ps_advance()
   rk := ps_peek_kind()
   ret_ty := if (rk == "LBrace") {
-    none_type()
+    none
   } else {
     if (rk == "Underscore") {
       ps_advance()
-      none_type()
+      none
     } else {
-      some_type(parse_type_expr())
+      Some(parse_type_expr())
     }
   }
-  void_mark := if (rk == "Underscore") { some_type(TypeExpr.Void) } else { none_type() }
+  void_mark := if (rk == "Underscore") { Some(TypeExpr.Void) } else { none }
   stmts := parse_block_stmts_braced()
   ss, fe := split_block(stmts)
   mk_expr_lambda_generics(generics, params, ret_ty, void_mark, ss, fe)
