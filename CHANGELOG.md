@@ -6,6 +6,21 @@ Branches: `history` (spec drafts), `haskell` (Haskell compiler), `rust` (Rust re
 
 ---
 
+### v0.91 — 2026-05-29 — `--import` stage 3: migrate ~20 lexer/parser/sema dispatch helpers from `_imp.rs` to `.hom` (Hom:Rs 1.92 → 2.65)
+
+Stage 3 of the `--import` rollout. With `parser.hom` now consuming `--import src/lexer.hom`, lexer's `TokenKind` variants are visible cross-file — so token inspection, matching, and keyword/single-op dispatch can finally live in `.hom`. Net diff: **+551 / −613** across 9 files; Hom:Rs source ratio jumps from 1.92 to 2.65.
+
+- `build.rs`: when compiling `parser.hom`, also pass `--import src/lexer.hom` so F9 match auto-deref + F12 construct auto-wrap work against `TokenKind` cross-file
+- `lexer.hom`: new `ls_keyword_token` (20-arm `match` on keyword strings → `TokenKind.*` variants) and `ls_try_single_op` (22-arm operator/delimiter dispatch)
+- `lexer_imp.rs`: deleted `ls_keyword`/`ls_keyword_token`/`ls_try_single_op` (−67 lines)
+- `parser.hom`: gained 19 helpers — `ps_peek_kind`/`ps_peek_ident`/`ps_peek_int`/`ps_peek_float`/`ps_peek_bool`/`ps_peek_str`/`ps_peek_char`, `ps_check`/`ps_consume`/`ps_expect`/`ps_advance_ident`, `ps_collect_attr_body`/`ps_collect_outer_attr_body`/`token_to_body_str`, `split_block`, `push_name_expr_pair`/`push_expr_pair`/`new_name_expr_pairs`/`new_expr_pairs`
+- `parser_imp.rs`: shrank from ~298 lines of token plumbing to a thin `ps_peek_token` + numeric-cast shims (`to_i64`/`to_f64`); kept `ps_same_line` (needs `parse_pos` thread-local)
+- `sema_imp.rs`: collapsed to a 2-line `has_rs_dep` stub; `errs_empty`/`errs_one`/`errs_join` + `expr_is_lambda` migrated into `sema.hom` (or already live in `codegen_helpers`)
+- `dep/codegen_helpers.rs`: deleted `is_str_expr`/`is_list_expr`/`expr_kind` (~109 lines) — discriminator dispatch via direct `match` is now the rule
+- 147 tests pass, `cargo fmt --check` + `cargo clippy --release -- -D warnings` clean
+
+---
+
 ### v0.90 — 2026-05-28 — Migration via `--import`: drop ~30 accessor helpers, direct `Expr.*` construction (stage 2)
 
 Cashed in the v0.89 `--import` bootstrap by migrating the three remaining compiler modules to direct match destructures and direct enum construction. Net diff: **+142 / −625** across 6 files (~480 lines removed).

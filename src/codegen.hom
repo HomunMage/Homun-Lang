@@ -659,7 +659,11 @@ maybe_box_wrap := (arg_s: str, field_ty: TypeExpr, enum_name: str) -> str {
 }
 
 cg_general_call := (i: int, sc: Scope, f: Expr, args: @[Expr]) -> str {
-  fn_name := if (expr_kind(f) == "Var") { expr_var_name(f) } else { "" }
+  f_m := f
+  fn_name := match f_m {
+    Expr.Var(n) -> n
+    _ -> ""
+  }
   filled_args := if (fn_name != "") {
     fill_default_args(fn_name, args)
   } else {
@@ -679,16 +683,11 @@ cg_general_call := (i: int, sc: Scope, f: Expr, args: @[Expr]) -> str {
   ai := 0
   while (ai < n) {
     arg_s := if (fn_name != "" and is_param_mutable_in_call(fn_name, ai)) {
-      ak := expr_kind(filled_args[ai])
-      if (ak == "Var") {
-        vn := expr_var_name(filled_args[ai])
-        if (is_mut_ref_param(vn)) {
-          vn
-        } else {
-          "&mut " + vn
+      match filled_args[ai] {
+        Expr.Var(vn) -> {
+          if (is_mut_ref_param(vn)) { vn } else { "&mut " + vn }
         }
-      } else {
-        "&mut (" + cg_expr(i, sc, filled_args[ai]) + ")"
+        _ -> "&mut (" + cg_expr(i, sc, filled_args[ai]) + ")"
       }
     } else {
       cg_clone_arg(i, sc, filled_args[ai])
@@ -705,14 +704,40 @@ cg_general_call := (i: int, sc: Scope, f: Expr, args: @[Expr]) -> str {
 }
 
 
-// ─── cg_bin_op ────────────────────────────────────────────────────────────────
-// Emit a binary operation.  op is the Debug string of BinOp.
+// ─── Expression predicates ───────────────────────────────────────────────────
 
-cg_bin_op := (i: int, sc: Scope, op: str, lhs: Expr, rhs: Expr) -> str {
+is_str_expr := (expr: Expr) -> bool {
+  match expr {
+    Expr.Str(_) -> true
+    Expr.BinOp(BinOp.Add, l, r) -> is_str_expr(l) or is_str_expr(r)
+    Expr.Call(f, _) -> {
+      match f {
+        Expr.Var(n) -> n == "str"
+        _ -> false
+      }
+    }
+    _ -> false
+  }
+}
+
+is_list_expr := (expr: Expr) -> bool {
+  match expr {
+    Expr.List(_) -> true
+    Expr.Slice(_, _, _, _) -> true
+    Expr.BinOp(BinOp.Add, l, r) -> is_list_expr(l) or is_list_expr(r)
+    _ -> false
+  }
+}
+
+
+// ─── cg_bin_op ────────────────────────────────────────────────────────────────
+// Emit a binary operation.
+
+cg_bin_op := (i: int, sc: Scope, op: BinOp, lhs: Expr, rhs: Expr) -> str {
   l := cg_expr(i, sc, lhs)
   r := cg_expr(i, sc, rhs)
   match op {
-    "Add" -> {
+    BinOp.Add -> {
       if (is_list_expr(lhs) or is_list_expr(rhs)) {
         "homun_concat(" + l + ", " + r + ")"
       } else {
@@ -728,21 +753,20 @@ cg_bin_op := (i: int, sc: Scope, op: str, lhs: Expr, rhs: Expr) -> str {
         }
       }
     }
-    "Sub" -> l + " - " + r
-    "Mul" -> l + " * " + r
-    "Div" -> l + " / " + r
-    "Mod" -> l + " % " + r
-    "Eq" -> l + " == " + r
-    "Neq" -> l + " != " + r
-    "Lt" -> l + " < " + r
-    "Gt" -> l + " > " + r
-    "Le" -> l + " <= " + r
-    "Ge" -> l + " >= " + r
-    "And" -> l + " && " + r
-    "Or" -> l + " || " + r
-    "In" -> "homun_in!(" + l + ", " + r + ")"
-    "NotIn" -> "!homun_in!(" + l + ", " + r + ")"
-    _ -> l + " " + op + " " + r
+    BinOp.Sub -> l + " - " + r
+    BinOp.Mul -> l + " * " + r
+    BinOp.Div -> l + " / " + r
+    BinOp.Mod -> l + " % " + r
+    BinOp.Eq -> l + " == " + r
+    BinOp.Neq -> l + " != " + r
+    BinOp.Lt -> l + " < " + r
+    BinOp.Gt -> l + " > " + r
+    BinOp.Le -> l + " <= " + r
+    BinOp.Ge -> l + " >= " + r
+    BinOp.And -> l + " && " + r
+    BinOp.Or -> l + " || " + r
+    BinOp.In -> "homun_in!(" + l + ", " + r + ")"
+    BinOp.NotIn -> "!homun_in!(" + l + ", " + r + ")"
   }
 }
 
@@ -970,64 +994,77 @@ cg_expr := (i: int, sc: Scope, expr: Expr) -> str {
         }
       }
     }
-    Expr.BinOp(_, lhs, rhs) -> {
-      op := expr_binop_op(expr)
+    Expr.BinOp(op, lhs, rhs) -> {
       cg_bin_op(i, sc, op, lhs, rhs)
     }
-    Expr.UnOp(_, e) -> {
-      op := expr_unop_op(expr)
-      if (op == "Not") {
-        "!" + cg_expr(i, sc, e)
-      } else {
-        "-" + cg_expr(i, sc, e)
+    Expr.UnOp(op, e) -> {
+      match op {
+        UnOp.Not -> "!" + cg_expr(i, sc, e)
+        UnOp.Neg -> "-" + cg_expr(i, sc, e)
       }
     }
     Expr.Pipe(lhs, rhs) -> {
-      if (expr_kind(rhs) == "Call") {
-        f := expr_call_func(rhs)
-        args := expr_call_args(rhs)
-        if (expr_kind(f) == "Var" and is_homun_macro(expr_var_name(f))) {
-          fn_name := expr_var_name(f)
-          lhs_s := cg_expr(i, sc, lhs)
-          if (len(args) == 0) {
-            fn_name + "!(" + lhs_s + ")"
-          } else {
-            fn_name + "!(" + lhs_s + ", " + cg_commas(i, sc, args) + ")"
-          }
-        } else {
-          lhs_s := cg_expr(i, sc, lhs)
-          all_args := @[lhs_s]
-          ai := 0
-          while (ai < len(args)) {
-            all_args := all_args + @[cg_expr(i, sc, args[ai])]
-            ai := ai + 1
-          }
-          cg_expr(i, sc, f) + "(" + join(all_args, ", ") + ")"
-        }
-      } else {
-        cg_expr(i, sc, rhs) + "(" + cg_expr(i, sc, lhs) + ")"
-      }
-    }
-    Expr.Call(f, args) -> {
-      if (expr_kind(f) == "Var") {
-        fname := expr_var_name(f)
-        if (fname == "print") {
-          cg_print(i, sc, args)
-        } else {
-          if (is_homun_macro(fname)) {
-            fname + "!(" + cg_commas(i, sc, args) + ")"
-          } else {
-            if (fname == "push" and len(args) == 2) {
-              v_s := cg_expr(i, sc, args[0])
-              item_s := cg_clone_arg(i, sc, args[1])
-              "push(&mut " + v_s + ", " + item_s + ")"
-            } else {
-              cg_general_call(i, sc, f, args)
+      match rhs {
+        Expr.Call(f, args) -> {
+          match f {
+            Expr.Var(fn_name) -> {
+              if (is_homun_macro(fn_name)) {
+                lhs_s := cg_expr(i, sc, lhs)
+                if (len(args) == 0) {
+                  fn_name + "!(" + lhs_s + ")"
+                } else {
+                  fn_name + "!(" + lhs_s + ", " + cg_commas(i, sc, args) + ")"
+                }
+              } else {
+                lhs_s := cg_expr(i, sc, lhs)
+                all_args := @[lhs_s]
+                ai := 0
+                while (ai < len(args)) {
+                  all_args := all_args + @[cg_expr(i, sc, args[ai])]
+                  ai := ai + 1
+                }
+                fn_name + "(" + join(all_args, ", ") + ")"
+              }
+            }
+            _ -> {
+              lhs_s := cg_expr(i, sc, lhs)
+              all_args := @[lhs_s]
+              ai := 0
+              while (ai < len(args)) {
+                all_args := all_args + @[cg_expr(i, sc, args[ai])]
+                ai := ai + 1
+              }
+              cg_expr(i, sc, f) + "(" + join(all_args, ", ") + ")"
             }
           }
         }
-      } else {
-        cg_general_call(i, sc, f, args)
+        _ -> {
+          cg_expr(i, sc, rhs) + "(" + cg_expr(i, sc, lhs) + ")"
+        }
+      }
+    }
+    Expr.Call(f, args) -> {
+      match f {
+        Expr.Var(fname) -> {
+          if (fname == "print") {
+            cg_print(i, sc, args)
+          } else {
+            if (is_homun_macro(fname)) {
+              fname + "!(" + cg_commas(i, sc, args) + ")"
+            } else {
+              if (fname == "push" and len(args) == 2) {
+                v_s := cg_expr(i, sc, args[0])
+                item_s := cg_clone_arg(i, sc, args[1])
+                "push(&mut " + v_s + ", " + item_s + ")"
+              } else {
+                cg_general_call(i, sc, Expr.Var(fname), args)
+              }
+            }
+          }
+        }
+        _ -> {
+          cg_general_call(i, sc, f, args)
+        }
       }
     }
     Expr.If(cond, then_stmts, then_fe, _) -> {
@@ -1071,9 +1108,17 @@ cg_expr := (i: int, sc: Scope, expr: Expr) -> str {
       match fe_opt {
         none -> {}
         Some(fe) -> {
-          is_empty_tup := expr_kind(fe) == "Tuple" and len(expr_tuple_items(fe)) == 0
-          if (not is_empty_tup) {
-            push(body_lines, "${ind(i + 1)}${cg_expr(i + 1, sc0, fe)};")
+          match fe {
+            Expr.Tuple(items) -> {
+              if (len(items) > 0) {
+                fe2 := Expr.Tuple(items)
+                s := cg_expr(i + 1, sc0, fe2)
+                push(body_lines, "${ind(i + 1)}${s};")
+              }
+            }
+            _ -> {
+              push(body_lines, "${ind(i + 1)}${cg_expr(i + 1, sc0, fe)};")
+            }
           }
         }
       }

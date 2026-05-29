@@ -1,7 +1,7 @@
 // parser.hom — Recursive-descent Pratt parser → AST
 //
 // Uses:
-//   parser_imp — token helpers (ps_peek_kind, ps_check, …), AST constructors,
+//   parser_imp — ps_peek_token, ps_same_line, AST constructors,
 //                Option helpers, split_block
 //
 // Thread-local state (pos, err, gensym_counter) lives here as @thread_local
@@ -47,6 +47,316 @@ ps_gensym := (prefix: str) -> str {
 }
 
 use parser_imp
+
+// ─── Token inspection (migrated from parser_imp.rs) ─────────────────────────
+
+ps_peek_kind := () -> str {
+  if (ps_has_err()) { "Eof" }
+  else {
+  t := ps_peek_token()
+  match t.kind {
+    TokenKind.Int(_) -> "Int"
+    TokenKind.Float(_) -> "Float"
+    TokenKind.Bool(_) -> "Bool"
+    TokenKind.Str(_) -> "Str"
+    TokenKind.Char(_) -> "Char"
+    TokenKind.None -> "None"
+    TokenKind.Ident(_) -> "Ident"
+    TokenKind.Use -> "Use"
+    TokenKind.Struct -> "Struct"
+    TokenKind.Enum -> "Enum"
+    TokenKind.For -> "For"
+    TokenKind.In -> "In"
+    TokenKind.While -> "While"
+    TokenKind.Do -> "Do"
+    TokenKind.If -> "If"
+    TokenKind.Else -> "Else"
+    TokenKind.Match -> "Match"
+    TokenKind.Break -> "Break"
+    TokenKind.Continue -> "Continue"
+    TokenKind.And -> "And"
+    TokenKind.Or -> "Or"
+    TokenKind.Not -> "Not"
+    TokenKind.As -> "As"
+    TokenKind.Rec -> "Rec"
+    TokenKind.MutAssign -> "MutAssign"
+    TokenKind.DoubleColon -> "DoubleColon"
+    TokenKind.Assign -> "Assign"
+    TokenKind.Arrow -> "Arrow"
+    TokenKind.FatArrow -> "FatArrow"
+    TokenKind.Pipe -> "Pipe"
+    TokenKind.Dot -> "Dot"
+    TokenKind.Plus -> "Plus"
+    TokenKind.Minus -> "Minus"
+    TokenKind.Star -> "Star"
+    TokenKind.Slash -> "Slash"
+    TokenKind.Percent -> "Percent"
+    TokenKind.Eq -> "Eq"
+    TokenKind.Neq -> "Neq"
+    TokenKind.Lt -> "Lt"
+    TokenKind.Gt -> "Gt"
+    TokenKind.Le -> "Le"
+    TokenKind.Ge -> "Ge"
+    TokenKind.Colon -> "Colon"
+    TokenKind.Comma -> "Comma"
+    TokenKind.Semi -> "Semi"
+    TokenKind.Underscore -> "Underscore"
+    TokenKind.At -> "At"
+    TokenKind.Bang -> "Bang"
+    TokenKind.Question -> "Question"
+    TokenKind.LParen -> "LParen"
+    TokenKind.RParen -> "RParen"
+    TokenKind.LBrace -> "LBrace"
+    TokenKind.RBrace -> "RBrace"
+    TokenKind.LBracket -> "LBracket"
+    TokenKind.RBracket -> "RBracket"
+    TokenKind.Eof -> "Eof"
+  }
+  }
+}
+
+ps_peek_ident := () -> str {
+  t := ps_peek_token()
+  match t.kind {
+    TokenKind.Ident(n) -> n
+    _ -> ""
+  }
+}
+
+ps_peek_int := () -> i64 {
+  t := ps_peek_token()
+  match t.kind {
+    TokenKind.Int(n) -> to_i64(n)
+    _ -> 0
+  }
+}
+
+ps_peek_float := () -> f64 {
+  t := ps_peek_token()
+  match t.kind {
+    TokenKind.Float(f) -> to_f64(f)
+    _ -> to_f64(0.0)
+  }
+}
+
+ps_peek_bool := () -> bool {
+  t := ps_peek_token()
+  match t.kind {
+    TokenKind.Bool(b) -> b
+    _ -> false
+  }
+}
+
+ps_peek_str := () -> str {
+  t := ps_peek_token()
+  match t.kind {
+    TokenKind.Str(s) -> s
+    _ -> ""
+  }
+}
+
+ps_peek_char := () -> str {
+  t := ps_peek_token()
+  match t.kind {
+    TokenKind.Char(c) -> str(c)
+    _ -> ""
+  }
+}
+
+// ─── Token matching (migrated from parser_imp.rs) ──────────────────────────
+
+ps_check := (kind: str) -> bool {
+  if (ps_has_err()) { => false }
+  ps_peek_kind() == kind
+}
+
+ps_consume := (kind: str) -> bool {
+  if (ps_has_err()) { => false }
+  if (ps_peek_kind() == kind) {
+    ps_advance()
+    true
+  } else {
+    false
+  }
+}
+
+ps_expect := (kind: str) -> _ {
+  if (not ps_has_err()) {
+    actual := ps_peek_kind()
+    if (actual == kind) {
+      ps_advance()
+    } else {
+      ps_set_err("Expected ${kind} but got ${actual}")
+    }
+  }
+}
+
+ps_advance_ident := () -> str {
+  if (ps_has_err()) { "" }
+  else {
+    t := ps_peek_token()
+    match t.kind {
+      TokenKind.Ident(n) -> {
+        ps_advance()
+        n
+      }
+      _ -> {
+        ps_set_err("Expected identifier, got ${ps_peek_kind()}")
+        ""
+      }
+    }
+  }
+}
+
+// ─── Attribute helpers (migrated from parser_imp.rs) ────────────────────────
+
+token_to_body_str := (t: Token) -> str {
+  match t.kind {
+    TokenKind.Ident(s) -> s
+    TokenKind.Int(n) -> str(n)
+    TokenKind.Float(f) -> str(f)
+    TokenKind.Bool(b) -> str(b)
+    TokenKind.Str(s) -> "\"" + s + "\""
+    TokenKind.Char(c) -> "'" + str(c) + "'"
+    TokenKind.LParen -> "("
+    TokenKind.RParen -> ")"
+    TokenKind.LBrace -> "{"
+    TokenKind.RBrace -> "}"
+    TokenKind.LBracket -> "["
+    TokenKind.RBracket -> "]"
+    TokenKind.Comma -> ","
+    TokenKind.Dot -> "."
+    TokenKind.Colon -> ":"
+    TokenKind.Semi -> ";"
+    TokenKind.Underscore -> "_"
+    TokenKind.Plus -> "+"
+    TokenKind.Minus -> "-"
+    TokenKind.Star -> "*"
+    TokenKind.Slash -> "/"
+    TokenKind.Percent -> "%"
+    TokenKind.Eq -> "=="
+    TokenKind.Neq -> "!="
+    TokenKind.Lt -> "<"
+    TokenKind.Gt -> ">"
+    TokenKind.Le -> "<="
+    TokenKind.Ge -> ">="
+    TokenKind.Pipe -> "|"
+    TokenKind.At -> "@"
+    TokenKind.Bang -> "!"
+    TokenKind.Question -> "?"
+    _ -> ""
+  }
+}
+
+ps_collect_attr_body := () -> str {
+  if (ps_has_err()) { "" }
+  else {
+    t := ps_peek_token()
+    attr_line := t.pos.line
+    ps_advance()
+    parts := @[]
+    done := false
+    while (not done) {
+      if (ps_has_err()) { done := true }
+      else {
+        t2 := ps_peek_token()
+        if (t2.pos.line != attr_line) { done := true }
+        else {
+          match t2.kind {
+            TokenKind.Eof -> { done := true }
+            _ -> {
+              push(parts, token_to_body_str(t2))
+              ps_advance()
+            }
+          }
+        }
+      }
+    }
+    join(parts, "")
+  }
+}
+
+ps_collect_outer_attr_body := () -> str {
+  if (ps_has_err()) { "" }
+  else {
+    parts := @[]
+    t := ps_peek_token()
+    attr_line := t.pos.line
+    name := match t.kind {
+      TokenKind.Ident(n) -> n
+      _ -> ""
+    }
+    if (name == "") { "" }
+    else {
+      push(parts, name)
+      ps_advance()
+      t2 := ps_peek_token()
+      if (t2.pos.line == attr_line) {
+        k := ps_peek_kind()
+        if (k == "LParen" or k == "LBracket" or k == "LBrace") {
+          push(parts, token_to_body_str(t2))
+          ps_advance()
+          depth ::= 1
+          while (depth > 0) {
+            if (ps_has_err()) { break }
+            t3 := ps_peek_token()
+            k3 := ps_peek_kind()
+            if (k3 == "Eof") { break }
+            if (k3 == "LParen" or k3 == "LBracket" or k3 == "LBrace") {
+              depth ::= depth + 1
+              push(parts, token_to_body_str(t3))
+              ps_advance()
+            } else {
+              if (k3 == "RParen" or k3 == "RBracket" or k3 == "RBrace") {
+                depth ::= depth - 1
+                push(parts, token_to_body_str(t3))
+                ps_advance()
+              } else {
+                push(parts, token_to_body_str(t3))
+                ps_advance()
+              }
+            }
+          }
+        }
+      }
+      join(parts, "")
+    }
+  }
+}
+
+// ─── Block / pair utilities (migrated from parser_imp.rs) ──────────────────
+
+split_block := (stmts: @[Stmt]) -> (@[Stmt], Expr) {
+  if (len(stmts) == 0) {
+    empty := @[]
+    => (stmts, Expr.Tuple(empty))
+  }
+  last := stmts[len(stmts) - 1]
+  match last {
+    Stmt.Expression(e) -> {
+      init := stmts[:-1]
+      (init, e)
+    }
+    _ -> {
+      empty := @[]
+      (stmts, Expr.Tuple(empty))
+    }
+  }
+}
+
+push_name_expr_pair := (pairs: @[(str, Expr)], name: str, expr: Expr) -> @[(str, Expr)] {
+  push(pairs, (name, expr))
+  pairs
+}
+
+push_expr_pair := (pairs: @[(Expr, Expr)], k: Expr, v: Expr) -> @[(Expr, Expr)] {
+  push(pairs, (k, v))
+  pairs
+}
+
+new_name_expr_pairs := () -> @[(str, Expr)] { @[] }
+
+new_expr_pairs := () -> @[(Expr, Expr)] { @[] }
 
 // ─── Entry point ────────────────────────────────────────────────────────────
 

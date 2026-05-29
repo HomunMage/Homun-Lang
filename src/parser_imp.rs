@@ -5,11 +5,10 @@
 // PARSE_TOKENS stays in Rust because it needs a concrete Vec<Token> type.
 //
 // Public API groups:
-//   Token inspection:  ps_peek_kind, ps_peek_ident, ps_peek_int, ...
-//   Token matching:    ps_check, ps_consume, ps_expect, ps_same_line
+//   Token inspection:  ps_peek_token, to_i64, to_f64
+//   Token matching:    ps_same_line (ps_check/consume/expect/advance_ident in parser.hom)
 //   AST constructors:  mk_expr_slice/lambda/for/while, mk_variantdef_multi/positional
 //   Option helpers:    some_else, no_else
-//   Utility:           split_block, push_name_expr_pair, new_name_expr_pairs
 
 use std::cell::RefCell;
 
@@ -57,96 +56,21 @@ pub fn ps_clear_err() {
     parse_err_set(String::new());
 }
 
-// ─── Token inspection ───────────────────────────────────────────────────────
-
-pub fn ps_peek_kind() -> String {
-    if has_err_internal() {
-        return "Eof".to_string();
-    }
-    let t = peek_token_internal();
-    token_kind_str(&t.kind)
+pub fn ps_peek_token() -> Token {
+    peek_token_internal()
 }
 
-pub fn ps_peek_ident() -> String {
-    let t = peek_token_internal();
-    match &t.kind {
-        TokenKind::Ident(n) => n.clone(),
-        _ => String::new(),
-    }
+// ─── Numeric cast helpers (used by ps_peek_int/ps_peek_float in parser.hom) ──
+
+pub fn to_i64(n: i32) -> i64 {
+    n as i64
 }
 
-pub fn ps_peek_int() -> i64 {
-    let t = peek_token_internal();
-    match t.kind {
-        TokenKind::Int(n) => n as i64,
-        _ => 0,
-    }
-}
-
-pub fn ps_peek_float() -> f64 {
-    let t = peek_token_internal();
-    match t.kind {
-        TokenKind::Float(f) => f as f64,
-        _ => 0.0,
-    }
-}
-
-pub fn ps_peek_bool() -> bool {
-    let t = peek_token_internal();
-    match t.kind {
-        TokenKind::Bool(b) => b,
-        _ => false,
-    }
-}
-
-pub fn ps_peek_str() -> String {
-    let t = peek_token_internal();
-    match &t.kind {
-        TokenKind::Str(s) => s.clone(),
-        _ => String::new(),
-    }
-}
-
-pub fn ps_peek_char() -> String {
-    let t = peek_token_internal();
-    match t.kind {
-        TokenKind::Char(c) => c.to_string(),
-        _ => String::new(),
-    }
+pub fn to_f64(f: f32) -> f64 {
+    f as f64
 }
 
 // ─── Token matching ─────────────────────────────────────────────────────────
-
-pub fn ps_check(kind: String) -> bool {
-    if has_err_internal() {
-        return false;
-    }
-    ps_peek_kind() == kind
-}
-
-pub fn ps_consume(kind: String) -> bool {
-    if has_err_internal() {
-        return false;
-    }
-    if ps_peek_kind() == kind {
-        advance_internal();
-        true
-    } else {
-        false
-    }
-}
-
-pub fn ps_expect(kind: String) {
-    if has_err_internal() {
-        return;
-    }
-    let actual = ps_peek_kind();
-    if actual == kind {
-        advance_internal();
-    } else {
-        ps_set_err(format!("Expected {} but got {}", kind, actual));
-    }
-}
 
 /// True if the current token is on the same line as the previous token.
 pub fn ps_same_line() -> bool {
@@ -159,27 +83,6 @@ pub fn ps_same_line() -> bool {
         let cur = pos.min(tokens.len() - 1);
         cur > 0 && tokens[cur].pos.line == tokens[cur - 1].pos.line
     })
-}
-
-// ─── Advance + extract ──────────────────────────────────────────────────────
-
-/// Advance and return the ident name. Sets error if current token is not Ident.
-pub fn ps_advance_ident() -> String {
-    if has_err_internal() {
-        return String::new();
-    }
-    let t = peek_token_internal();
-    match &t.kind {
-        TokenKind::Ident(n) => {
-            let name = n.clone();
-            advance_internal();
-            name
-        }
-        _ => {
-            ps_set_err(format!("Expected identifier, got {}", token_kind_str(&t.kind)));
-            String::new()
-        }
-    }
 }
 
 // ─── AST constructors: Expr ─────────────────────────────────────────────────
@@ -271,58 +174,6 @@ pub fn no_else() -> Option<(Vec<Stmt>, Box<Expr>)> {
     std::option::Option::None
 }
 
-// ─── Utility ────────────────────────────────────────────────────────────────
-
-/// Split a block's statements into (stmts, final_expr).
-/// If the last statement is an Expression, it becomes the final_expr.
-/// Otherwise final_expr is the unit tuple.
-pub fn split_block(stmts: Vec<Stmt>) -> (Vec<Stmt>, Expr) {
-    if stmts.is_empty() {
-        return (vec![], Expr::Tuple(vec![]));
-    }
-    let mut stmts = stmts;
-    match stmts.last() {
-        Some(Stmt::Expression(_)) => {
-            if let Stmt::Expression(e) = stmts.pop().unwrap() {
-                (stmts, e)
-            } else {
-                unreachable!()
-            }
-        }
-        _ => (stmts, Expr::Tuple(vec![])),
-    }
-}
-
-/// Push a (String, Expr) pair onto a Vec (for struct literal fields / dict building).
-pub fn push_name_expr_pair(
-    mut pairs: Vec<(String, Expr)>,
-    name: String,
-    expr: Expr,
-) -> Vec<(String, Expr)> {
-    pairs.push((name, expr));
-    pairs
-}
-
-/// Push an (Expr, Expr) pair onto a Vec (for dict building).
-pub fn push_expr_pair(
-    mut pairs: Vec<(Expr, Expr)>,
-    k: Expr,
-    v: Expr,
-) -> Vec<(Expr, Expr)> {
-    pairs.push((k, v));
-    pairs
-}
-
-/// Create an empty Vec<(String, Expr)>.
-pub fn new_name_expr_pairs() -> Vec<(String, Expr)> {
-    vec![]
-}
-
-/// Create an empty Vec<(Expr, Expr)>.
-pub fn new_expr_pairs() -> Vec<(Expr, Expr)> {
-    vec![]
-}
-
 // ─── @! inner-attribute helpers ─────────────────────────────────────────────
 
 /// Peek at the kind of the token one position ahead (pos+1).
@@ -336,137 +187,6 @@ pub fn ps_peek_next_kind() -> String {
         let next_idx = (pos + 1).min(tokens.len() - 1);
         token_kind_str(&tokens[next_idx].kind)
     })
-}
-
-fn token_to_body_str(kind: &TokenKind) -> String {
-    match kind {
-        TokenKind::Ident(s) => s.clone(),
-        TokenKind::Int(n) => n.to_string(),
-        TokenKind::Float(f) => f.to_string(),
-        TokenKind::Bool(b) => b.to_string(),
-        TokenKind::Str(s) => format!("\"{}\"", s),
-        TokenKind::Char(c) => format!("'{}'", c),
-        TokenKind::LParen => "(".to_string(),
-        TokenKind::RParen => ")".to_string(),
-        TokenKind::LBrace => "{".to_string(),
-        TokenKind::RBrace => "}".to_string(),
-        TokenKind::LBracket => "[".to_string(),
-        TokenKind::RBracket => "]".to_string(),
-        TokenKind::Comma => ",".to_string(),
-        TokenKind::Dot => ".".to_string(),
-        TokenKind::Colon => ":".to_string(),
-        TokenKind::Semi => ";".to_string(),
-        TokenKind::Underscore => "_".to_string(),
-        TokenKind::Plus => "+".to_string(),
-        TokenKind::Minus => "-".to_string(),
-        TokenKind::Star => "*".to_string(),
-        TokenKind::Slash => "/".to_string(),
-        TokenKind::Percent => "%".to_string(),
-        TokenKind::Eq => "==".to_string(),
-        TokenKind::Neq => "!=".to_string(),
-        TokenKind::Lt => "<".to_string(),
-        TokenKind::Gt => ">".to_string(),
-        TokenKind::Le => "<=".to_string(),
-        TokenKind::Ge => ">=".to_string(),
-        TokenKind::Pipe => "|".to_string(),
-        TokenKind::At => "@".to_string(),
-        TokenKind::Bang => "!".to_string(),
-        TokenKind::Question => "?".to_string(),
-        _ => String::new(),
-    }
-}
-
-/// Consume the Bang token and collect all remaining tokens on the same line,
-/// reconstructing the attribute body string (e.g. "allow(dead_code)").
-/// Called after the caller has already consumed the At token.
-pub fn ps_collect_attr_body() -> String {
-    if has_err_internal() {
-        return String::new();
-    }
-    let attr_line = peek_token_internal().pos.line;
-    advance_internal(); // consume Bang
-    let mut parts: Vec<String> = Vec::new();
-    loop {
-        if has_err_internal() {
-            break;
-        }
-        let t = peek_token_internal();
-        if t.pos.line != attr_line {
-            break;
-        }
-        match &t.kind {
-            TokenKind::Eof => break,
-            kind => {
-                parts.push(token_to_body_str(kind));
-                advance_internal();
-            }
-        }
-    }
-    parts.concat()
-}
-
-/// Collect the body of an outer attribute starting at the current token (the
-/// ident after `@`). Consumes the ident and an optional balanced bracket group
-/// `(...)` / `[...]` on the same line. Stops at `@`, end-of-line, or Eof.
-/// Returns the reconstructed body string (e.g. `"derive(Clone)"`, `"inline"`).
-/// Called after the caller has already consumed the `At` token.
-pub fn ps_collect_outer_attr_body() -> String {
-    if has_err_internal() {
-        return String::new();
-    }
-    let mut parts: Vec<String> = Vec::new();
-
-    // Consume the leading ident.
-    let t = peek_token_internal();
-    let attr_line = t.pos.line;
-    match &t.kind {
-        TokenKind::Ident(n) => {
-            parts.push(n.clone());
-            advance_internal();
-        }
-        _ => return String::new(),
-    }
-
-    // Optionally consume a balanced bracket group on the same line.
-    let t = peek_token_internal();
-    if t.pos.line == attr_line {
-        let open = match &t.kind {
-            TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace => {
-                Some(token_to_body_str(&t.kind))
-            }
-            _ => None,
-        };
-        if let Some(open_str) = open {
-            parts.push(open_str);
-            advance_internal();
-            let mut depth: i32 = 1;
-            while depth > 0 {
-                if has_err_internal() {
-                    break;
-                }
-                let t = peek_token_internal();
-                match &t.kind {
-                    TokenKind::Eof => break,
-                    TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace => {
-                        depth += 1;
-                        parts.push(token_to_body_str(&t.kind));
-                        advance_internal();
-                    }
-                    TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => {
-                        depth -= 1;
-                        parts.push(token_to_body_str(&t.kind));
-                        advance_internal();
-                    }
-                    kind => {
-                        parts.push(token_to_body_str(kind));
-                        advance_internal();
-                    }
-                }
-            }
-        }
-    }
-
-    parts.concat()
 }
 
 // ─── Public entry point ─────────────────────────────────────────────────────

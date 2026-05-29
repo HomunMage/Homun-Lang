@@ -15,15 +15,12 @@
 // Token char helper:
 //   make_token_char_from_str(val, pos) -> Token  — String → char payload
 //
-// Keyword dispatch:
-//   ls_keyword_token(s, pos) -> Token
-//
 // Char-testing helpers (is_alpha, is_digit, is_alnum, is_whitespace,
 // is_newline) live in hom-std/chars.rs — import via `use chars` in lexer.hom.
 //
 // Operator dispatch (now return TokenKind / Option<TokenKind>):
 //   ls_try_multi_op(s) -> (TokenKind, i64)   — (Eof, 0) = no match
-//   ls_try_single_op(c) -> Option<TokenKind>
+//   ls_try_single_op(c) -> Option<TokenKind>  — migrated to lexer.hom
 
 // Lexer: helper functions for Homun tokens.
 
@@ -159,40 +156,6 @@ pub fn ls_set_err(s: LexState, err: String) -> LexState {
     LexState { err, ..s }
 }
 
-// ── Keyword dispatch (stays in Rust — constructs TokenKind enum variants) ────
-
-/// Resolve an identifier word to a keyword Token or Ident Token.
-pub fn ls_keyword_token(s: String, pos: Pos) -> Token {
-    let kind = ls_keyword(s);
-    Token { kind, pos }
-}
-
-fn ls_keyword(s: String) -> TokenKind {
-    match s.as_str() {
-        "use" => TokenKind::Use,
-        "struct" => TokenKind::Struct,
-        "enum" => TokenKind::Enum,
-        "for" => TokenKind::For,
-        "in" => TokenKind::In,
-        "while" => TokenKind::While,
-        "do" => TokenKind::Do,
-        "if" => TokenKind::If,
-        "else" => TokenKind::Else,
-        "match" => TokenKind::Match,
-        "break" => TokenKind::Break,
-        "continue" => TokenKind::Continue,
-        "and" => TokenKind::And,
-        "or" => TokenKind::Or,
-        "not" => TokenKind::Not,
-        "as" => TokenKind::As,
-        "rec" => TokenKind::Rec,
-        "true" => TokenKind::Bool(true),
-        "false" => TokenKind::Bool(false),
-        "none" => TokenKind::None,
-        _ => TokenKind::Ident(s),
-    }
-}
-
 // ── Operator dispatch helpers ─────────────────────────────────────────────────
 
 /// Try to lex a two-character operator at the current position.
@@ -217,37 +180,6 @@ pub fn ls_try_multi_op(s: LexState) -> (TokenKind, i64) {
         ('<', '=') => (TokenKind::Le, 2),
         ('>', '=') => (TokenKind::Ge, 2),
         _ => (TokenKind::Eof, 0),
-    }
-}
-
-/// Try to lex a single-character operator/delimiter.
-/// Takes a 1-char String (as returned by ls_cur) for .hom interop.
-/// Returns Some(kind) or None if the character is unknown.
-pub fn ls_try_single_op(c: String) -> Option<TokenKind> {
-    match c.as_str() {
-        "|" => Some(TokenKind::Pipe),
-        "." => Some(TokenKind::Dot),
-        "+" => Some(TokenKind::Plus),
-        "-" => Some(TokenKind::Minus),
-        "*" => Some(TokenKind::Star),
-        "/" => Some(TokenKind::Slash),
-        "%" => Some(TokenKind::Percent),
-        "<" => Some(TokenKind::Lt),
-        ">" => Some(TokenKind::Gt),
-        ":" => Some(TokenKind::Colon),
-        "," => Some(TokenKind::Comma),
-        ";" => Some(TokenKind::Semi),
-        "_" => Some(TokenKind::Underscore),
-        "@" => Some(TokenKind::At),
-        "!" => Some(TokenKind::Bang),
-        "?" => Some(TokenKind::Question),
-        "(" => Some(TokenKind::LParen),
-        ")" => Some(TokenKind::RParen),
-        "{" => Some(TokenKind::LBrace),
-        "}" => Some(TokenKind::RBrace),
-        "[" => Some(TokenKind::LBracket),
-        "]" => Some(TokenKind::RBracket),
-        _ => None,
     }
 }
 

@@ -1,12 +1,11 @@
 // lexer.hom — Tokenises Homun source into @[Token].
 //
 // Uses:
-//   lexer_imp — LexState type, char-walking helpers, token constructors,
-//               keyword dispatch (ls_keyword_token)
+//   lexer_imp — LexState type, char-walking helpers, token constructors
 //
-// Inner loops (string, block comment, char literal, number, ident) are
-// implemented here in .hom. Only type definitions, token constructors,
-// and keyword→TokenKind dispatch remain in lexer_imp.rs.
+// Inner loops (string, block comment, char literal, number, ident) and
+// keyword→TokenKind dispatch are implemented here in .hom. Only type
+// definitions and token constructors remain in lexer_imp.rs.
 //
 // ls_cur / ls_peek return 1-char Strings so .hom code can compare with
 // string literals.
@@ -90,6 +89,61 @@ TokenKind := enum {
 // checks for helper functions available at include!() time.
 use lexer_imp
 use chars
+
+ls_keyword_token := (s: str, pos: Pos) -> Token {
+  kind := match s {
+    "use" -> TokenKind.Use
+    "struct" -> TokenKind.Struct
+    "enum" -> TokenKind.Enum
+    "for" -> TokenKind.For
+    "in" -> TokenKind.In
+    "while" -> TokenKind.While
+    "do" -> TokenKind.Do
+    "if" -> TokenKind.If
+    "else" -> TokenKind.Else
+    "match" -> TokenKind.Match
+    "break" -> TokenKind.Break
+    "continue" -> TokenKind.Continue
+    "and" -> TokenKind.And
+    "or" -> TokenKind.Or
+    "not" -> TokenKind.Not
+    "as" -> TokenKind.As
+    "rec" -> TokenKind.Rec
+    "true" -> TokenKind.Bool(true)
+    "false" -> TokenKind.Bool(false)
+    "none" -> TokenKind.None
+    _ -> TokenKind.Ident(s)
+  }
+  Token { kind: kind, pos: pos }
+}
+
+ls_try_single_op := (c: str) -> Option<TokenKind> {
+  match c {
+    "|" -> Some(TokenKind.Pipe)
+    "." -> Some(TokenKind.Dot)
+    "+" -> Some(TokenKind.Plus)
+    "-" -> Some(TokenKind.Minus)
+    "*" -> Some(TokenKind.Star)
+    "/" -> Some(TokenKind.Slash)
+    "%" -> Some(TokenKind.Percent)
+    "<" -> Some(TokenKind.Lt)
+    ">" -> Some(TokenKind.Gt)
+    ":" -> Some(TokenKind.Colon)
+    "," -> Some(TokenKind.Comma)
+    ";" -> Some(TokenKind.Semi)
+    "_" -> Some(TokenKind.Underscore)
+    "@" -> Some(TokenKind.At)
+    "!" -> Some(TokenKind.Bang)
+    "?" -> Some(TokenKind.Question)
+    "(" -> Some(TokenKind.LParen)
+    ")" -> Some(TokenKind.RParen)
+    "{" -> Some(TokenKind.LBrace)
+    "}" -> Some(TokenKind.RBrace)
+    "[" -> Some(TokenKind.LBracket)
+    "]" -> Some(TokenKind.RBracket)
+    _ -> none
+  }
+}
 
 // Resolve a 1-char string after a backslash: "n" → "\n", "t" → "\t", etc.
 unescape_char := (c: str) -> str {

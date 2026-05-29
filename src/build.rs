@@ -194,6 +194,13 @@ fn compile_hom_files() {
                     cmd_args.push(ast_path.to_string_lossy().into_owned());
                 }
             }
+            if stem == "parser" {
+                let lexer_path = PathBuf::from("src/lexer.hom");
+                if lexer_path.exists() {
+                    cmd_args.push("--import".to_string());
+                    cmd_args.push(lexer_path.to_string_lossy().into_owned());
+                }
+            }
             cmd_args.push(path.to_string_lossy().into_owned());
             cmd_args.push("-o".to_string());
             cmd_args.push(rs_path.to_string_lossy().into_owned());
