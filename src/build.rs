@@ -208,9 +208,11 @@ fn compile_hom_files() {
             let status = Command::new(&homunc).args(&cmd_args).status();
             match status {
                 Ok(s) if s.success() => {
-                    // Strip duplicate #[cfg(test)] mod tests blocks from inlined deps
                     if let Ok(content) = std::fs::read_to_string(&rs_path) {
-                        let cleaned = strip_test_modules(&content);
+                        let mut cleaned = strip_test_modules(&content);
+                        if stem == "ast" {
+                            cleaned = fix_cross_enum_overboxing(&cleaned);
+                        }
                         let _ = std::fs::write(&rs_path, cleaned);
                     }
                     println!(
@@ -233,6 +235,68 @@ fn compile_hom_files() {
         }
         println!("cargo:rerun-if-changed={}", path.display());
     }
+}
+
+/// Fix cross-enum over-boxing in generated ast.rs.
+///
+/// Some bootstrap compiler versions register ALL enum names as recursive in a
+/// pre-pass, causing `codegen_type_variant_field` to wrap cross-enum references
+/// in `Box<>` (e.g. `Box<Expr>` inside `Stmt`, `Box<BinOp>` inside `Expr`).
+/// Only self-recursive references should be boxed (e.g. `Box<Expr>` inside `Expr`).
+///
+/// This strips the over-boxing so that the generated types match the auto-wrap
+/// and auto-deref behavior (which only handles self-recursive).
+fn fix_cross_enum_overboxing(src: &str) -> String {
+    let enum_names: &[&str] = &[
+        "BinOp", "UnOp", "TypeExpr", "LValue", "Pat", "Expr", "Stmt", "MatchArm",
+    ];
+    let mut result = String::with_capacity(src.len());
+    let mut current_enum: Option<&str> = None;
+    let mut depth: i32 = 0;
+
+    for line in src.lines() {
+        let trimmed = line.trim();
+        if current_enum.is_none()
+            && let Some(rest) = trimmed.strip_prefix("pub enum ")
+            && let Some(name_end) = rest.find(|c: char| !c.is_alphanumeric() && c != '_')
+        {
+            let name = &rest[..name_end];
+            if enum_names.contains(&name) {
+                current_enum = Some(name);
+                depth = 0;
+            }
+        }
+
+        if current_enum.is_some() {
+            depth += line.chars().filter(|&c| c == '{').count() as i32;
+            depth -= line.chars().filter(|&c| c == '}').count() as i32;
+        }
+
+        let output_line = if let Some(self_name) = current_enum {
+            let mut fixed = line.to_string();
+            for &en in enum_names {
+                if en == self_name {
+                    continue;
+                }
+                let boxed = format!("Box<{en}>");
+                let opt_boxed = format!("Option<Box<{en}>>");
+                let opt_plain = format!("Option<{en}>");
+                fixed = fixed.replace(&opt_boxed, &opt_plain);
+                fixed = fixed.replace(&boxed, en);
+            }
+            fixed
+        } else {
+            line.to_string()
+        };
+
+        result.push_str(&output_line);
+        result.push('\n');
+
+        if current_enum.is_some() && depth <= 0 {
+            current_enum = None;
+        }
+    }
+    result
 }
 
 /// Strip `#[cfg(test)] mod tests { ... }` blocks from concatenated Rust source.
