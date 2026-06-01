@@ -17,9 +17,7 @@ Net diff: **+380 / −721** across 15 files.
 - Killed `dep/` directory: content → `codegen_imp.rs`, lib.rs rewired to `use crate::ast::*`
 - Auto-Box supports indirect recursion (all enum names registered upfront in pre-pass)
 - Type-specific helpers → generics: `vec_extend<T>`, `vec_push<T>`, `vec_pop<T>`
-- Docs: fixed Compiler-Design.md (6 errors), cleaned .gitignore, removed cryptic Fx comments
-- 147 tests, fmt clean, clippy clean
-
+- Reverted the "register all enum names" pre-pass — it over-Boxed `Expr` fields in `Stmt` variants, breaking user code. Restored per-enum register/clear (v0.91 behavior)
 ---
 
 ### v0.91 — 2026-05-29 — `--import` stage 3: migrate ~20 lexer/parser/sema dispatch helpers from `_imp.rs` to `.hom` (Hom:Rs 1.92 → 2.65)

@@ -84,7 +84,6 @@ register_external_types := (stmts: @[Stmt]) -> _ {
   while (j < n) {
     match stmts[j] {
       Stmt.EnumDef(ename, variants, _) -> {
-        register_recursive_type(ename)
         nv := len(variants)
         vi := 0
         while (vi < nv) {
@@ -1392,6 +1391,7 @@ cg_stmt := (i: int, sc: Scope, stmt: Stmt) -> str {
       ind(i) + "#[derive(Debug, Clone, PartialEq)]\n" + ind(i) + "struct " + name + " {\n" + join(field_lines, "\n") + "\n" + ind(i) + "}"
     }
     Stmt.EnumDef(name, variants, _) -> {
+      register_recursive_type(name)
       n := len(variants)
       var_lines := @[]
       vi := 0
@@ -1399,6 +1399,7 @@ cg_stmt := (i: int, sc: Scope, stmt: Stmt) -> str {
         push(var_lines, cg_variant_line(i + 1, variants[vi]))
         vi := vi + 1
       }
+      clear_recursive_types()
       ind(i) + "#[derive(Debug, Clone, PartialEq)]\n" + ind(i) + "enum " + name + " {\n" + join(var_lines, "\n") + "\n" + ind(i) + "}"
     }
     Stmt.Expression(e) -> {
@@ -1602,6 +1603,7 @@ codegen_top_level_stmt := (i: int, stmt: Stmt, rs_content: RsContent) -> str {
       }
     }
     Stmt.EnumDef(name, variants, attrs) -> {
+      register_recursive_type(name)
       n := len(variants)
       var_lines := @[]
       vi := 0
@@ -1609,6 +1611,7 @@ codegen_top_level_stmt := (i: int, stmt: Stmt, rs_content: RsContent) -> str {
         push(var_lines, cg_variant_line(i + 1, variants[vi]))
         vi := vi + 1
       }
+      clear_recursive_types()
       attrs_str := emit_attrs(attrs)
       has_derive := false
       for a in attrs {
@@ -1656,21 +1659,7 @@ codegen_top_level_stmt := (i: int, stmt: Stmt, rs_content: RsContent) -> str {
 codegen_program_with_resolved := (prog: @[Stmt], hom_files: HomFiles, rs_content: RsContent) -> str {
   n := len(prog)
   clear_thread_local_vars()
-  // Pre-pass 0: register all enum names as potentially recursive types.
-  // This enables auto-Box for INDIRECT recursion (e.g. Expr → Control(ControlExpr) → If(Expr)).
-  // Registering all enum names is safe: codegen_type_variant_field only wraps
-  // a field in Box<T> when the field's type name matches a registered enum name,
-  // so non-recursive fields (int, str, Vec<...>) are unaffected.
-  clear_recursive_types()
-  rr := 0
-  while (rr < n) {
-    match prog[rr] {
-      Stmt.EnumDef(ename, _, _) -> register_recursive_type(ename)
-      _ -> {}
-    }
-    rr := rr + 1
-  }
-  // Pre-pass 1: register variant field types for all top-level enums so that
+  // Pre-pass: register variant field types for all top-level enums so that
   // cg_arm can detect bindings landing on Box<T> positions. The registry is
   // additive across files so that when this codegen pass runs for a file that
   // imports an enum via `use`, the dependency's variants (registered when its
