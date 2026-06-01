@@ -74,7 +74,7 @@ resolve_file := (rs::ResolverState, path: str) -> ResolveFileResult {
     } else {
       // White — first visit to this file
       rs.color := str_dict_set(rs.color, canonical, "Gray")
-      rs.stack := vec_push_str(rs.stack, canonical)
+      rs.stack := vec_push(rs.stack, canonical)
 
       source := fs_read(canonical)?
       tokens := do_lex(source)?
@@ -98,7 +98,7 @@ resolve_file := (rs::ResolverState, path: str) -> ResolveFileResult {
               if (fd_kind == "Hom") {
                 dep_exports := resolve_file(rs, fd_path)?
                 imported_names := hashset_extend(imported_names, hashset_from_vec(dep_exports))
-                rs.resolved_hom_names := vec_push_str(rs.resolved_hom_names, dep_name)
+                rs.resolved_hom_names := vec_push(rs.resolved_hom_names, dep_name)
               }
 
               if (fd_kind == "Rs") {
@@ -118,7 +118,7 @@ resolve_file := (rs::ResolverState, path: str) -> ResolveFileResult {
                       has_rs_dep := true
                     } else {
                       has_rs_dep := true
-                      rs.resolved_hom_names := vec_push_str(rs.resolved_hom_names, dep_name)
+                      rs.resolved_hom_names := vec_push(rs.resolved_hom_names, dep_name)
                     }
                   }
                 }
@@ -155,11 +155,11 @@ resolve_file := (rs::ResolverState, path: str) -> ResolveFileResult {
           ei := ei + 1
         }
 
-        rs.stack := vec_pop_str(rs.stack)
+        rs.stack := vec_pop(rs.stack)
         rs.color := str_dict_set(rs.color, canonical, "Black")
 
         rf := make_resolved_file(canonical, rust_code, exports)
-        rs.files := files_push_rf(rs.files, rf)
+        rs.files := vec_push(rs.files, rf)
 
         Ok(exports)
       }

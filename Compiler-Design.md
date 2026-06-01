@@ -1,6 +1,6 @@
 # homunc — Homun → Rust Compiler
 
-A text-to-text transpiler that compiles the **Homun** scripting language into **Rust** source code. Written entirely in Rust with zero external dependencies.
+A text-to-text transpiler that compiles the **Homun** scripting language into **Rust** source code. The compiler is hemi-self-hosting — ~30% written in Homun (`.hom`) and ~70% in Rust (`_imp.rs` partners + `dep/`) — with a single external dependency (`regex`, used by the embedded `re` runtime library).
 
 ---
 
@@ -45,7 +45,7 @@ Source (.hom)
 ## Build
 
 ```bash
-# Requires Rust >= 1.70
+# Requires Rust >= 1.85 (edition 2024)
 cargo build --release
 ```
 
@@ -64,6 +64,14 @@ homunc examples/fizzbuzz.hom -o output.rs
 
 # Emit embedded runtime (for multi-module Cargo projects)
 homunc --emit-runtime > src/runtime.rs
+
+# Compile a single module without prepending the runtime preamble
+# (used by build.rs when compiling the compiler's own .hom sources)
+homunc --module src/types.hom -o out/types.rs
+
+# Pre-register an external .hom's enum variant types so cross-file Box
+# auto-wrap/auto-deref work during compilation (compiler-bootstrap flag)
+homunc --module --import src/ast.hom src/parser.hom -o out/parser.rs
 
 # Version / help
 homunc -v
@@ -157,9 +165,9 @@ For multi-module Cargo projects, use `homunc --emit-runtime > src/runtime.rs` to
 | `@{"a": 1}` | `HashMap::from([("a", 1)])` |
 | `@{"x","y"}` | `HashSet::from(["x","y"])` |
 | `list \| filter(f) \| map(g)` | `map(filter(list, f), g)` |
-| `if (c) do { x } else { y }` | `if c { x } else { y }` |
-| `match x { pat => body }` | `match x { pat => body, }` |
-| `for i in range(n) do { }` | `for i in (0..n) { }` |
+| `if (c) { x } else { y }` | `if c { x } else { y }` |
+| `match x { pat -> body }` | `match x { pat => body, }` |
+| `for i in range(n) { }` | `for i in (0..n) { }` |
 | `break => value` | `break value` |
 | `"Hello ${name}"` | `format!("Hello {}", name)` |
 | `Player := struct { hp: int }` | `pub struct Player { pub hp: i32, }` |
@@ -186,6 +194,7 @@ The `Sema` pass enforces Homun's rules **before** codegen:
 | `float` | `f32` |
 | `bool` | `bool` |
 | `str` | `String` |
+| `char` | `char` (single quotes: `'a'`, `'\n'`) |
 | `none` | `Option<_>` |
 | `@[T]` | `Vec<T>` |
 | `@{K:V}` | `HashMap<K, V>` |
@@ -202,9 +211,8 @@ Homun-Lang/
 ├── Cargo.toml
 ├── Compiler-Design.md
 ├── Dockerfile           — cross-compilation (linux x86_64, aarch64, windows)
-├── Dockerfile.wasm      — WASM build (wasm32-wasi)
-├── gen/
-│   └── main_entry.rs    — generated bin shim (build.rs writes; tracked)
+├── Dockerfile.test      — test image
+├── Dockerfile.wasm      — WASM build (wasm32-wasip1)
 ├── hom-std/             — runtime library source (embedded in homunc at build time)
 │   ├── builtin.rs       — macros (range!, len!, filter!, map!, dict!, set!, slice!)
 │   ├── std/             — standard library (str, math, collection, dict, stack, deque, io)
@@ -219,6 +227,7 @@ Homun-Lang/
 ├── src/
 │   ├── build.rs         — bootstraps .hom compilation, generates runtime.rs
 │   ├── lib.rs           — wires compiled .hom modules + embedded runtime
+│   ├── main_entry.rs    — committed bin shim → main_hom::main() (v0.88)
 │   ├── ast.hom          — AST types (self-hosted, v0.84)
 │   ├── main.hom         — CLI entry point (self-hosted)
 │   ├── lexer.hom        — tokeniser (self-hosted)

@@ -47,10 +47,6 @@ pub mod runtime {
     include!(concat!(env!("OUT_DIR"), "/runtime.rs"));
 }
 
-// ── dep/ — hand-written Rust helpers for .hom modules (Phase 1/2 bridges) ──
-#[path = "dep/mod.rs"]
-pub mod dep;
-
 // ── Compiler pipeline modules ────────────────────────────────────────────────
 // ast is now compiled from src/ast.hom by build.rs
 pub mod ast {
@@ -59,7 +55,7 @@ pub mod ast {
 
 // ── parser_hom — parser compiled from parser.hom ────────────────────────────
 pub mod parser_hom {
-    use crate::dep::*;
+    use crate::ast::*;
     use crate::lexer_hom::{Token, TokenKind};
     use crate::runtime::*;
     // is_upper: use the first-char-only version from chars, not the all-chars
@@ -70,7 +66,7 @@ pub mod parser_hom {
 
 // ── lexer_hom — tokeniser compiled from lexer.hom ────────────────────────────
 pub mod lexer_hom {
-    use crate::dep::*;
+    use crate::ast::*;
     use crate::runtime::*;
     // chars helpers (is_alpha/is_digit/is_alnum/is_whitespace/is_newline)
     // — pulled from the runtime sub-module since std/str.rs in runtime root
@@ -81,21 +77,25 @@ pub mod lexer_hom {
 
 // ── sema_hom — semantic analysis compiled from sema.hom ──────────────────────
 pub mod sema_hom {
-    use crate::dep::*;
+    use crate::ast::*;
+    use crate::codegen_hom::{
+        expr_break_value, expr_for_final, expr_if_else_expr, expr_if_else_stmts, expr_if_has_else,
+        expr_slice_from, expr_slice_step, expr_slice_to, expr_while_final,
+    };
     use crate::runtime::*;
     include!(concat!(env!("OUT_DIR"), "/sema.rs"));
 }
 
 // ── codegen_hom — code generator compiled from codegen.hom ───────────────────
 pub mod codegen_hom {
-    use crate::dep::*;
+    use crate::ast::*;
     use crate::runtime::*;
     include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
 }
 
 // ── resolver_hom — resolver compiled from resolver.hom ───────────────────────
 pub mod resolver_hom {
-    use crate::dep::*;
+    use crate::ast::*;
     use crate::runtime::*;
     include!(concat!(env!("OUT_DIR"), "/resolver.rs"));
 }
@@ -103,7 +103,7 @@ pub mod resolver_hom {
 // ── main_hom — CLI entry point compiled from main.hom ────────────────────────
 #[allow(clippy::println_empty_string)]
 pub mod main_hom {
-    use crate::dep::*;
+    use crate::ast::*;
     use crate::runtime::*;
     use crate::{
         builtin_rs, codegen_hom, embedded_rs, lexer_hom, parser_hom, resolver_hom, sema_hom,

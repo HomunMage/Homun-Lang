@@ -292,7 +292,7 @@ ls_read_number := (state::LexState) -> Token {
 
   raw := ls_substr(state, start, ls_i(state))
 
-  if (str_contains(raw, ".")) {
+  if (contains(raw, ".")) {
     ok, val := parse_float_result(raw)
     if (ok) {
       Token { kind: TokenKind.Float(val), pos: pos }
@@ -332,7 +332,7 @@ ls_read_ident := (state::LexState) -> Token {
 
 lex := (source: str) -> Result<@[Token], str> {
   state := make_lex_state(source)
-  tokens := tokens_new()
+  tokens := @[]
 
   while (ls_should_continue(state)) {
     c   := ls_cur(state)
@@ -361,7 +361,7 @@ lex := (source: str) -> Result<@[Token], str> {
           if (c == "\"") {
             s := ls_read_string(state)
             if (not ls_has_err(state)) {
-              tokens := tokens_push(tokens, Token { kind: TokenKind.Str(s), pos: pos })
+              push(tokens, Token { kind: TokenKind.Str(s), pos: pos })
             }
           } else {
 
@@ -369,7 +369,7 @@ lex := (source: str) -> Result<@[Token], str> {
             if (c == "'") {
               ch := ls_read_char_lit(state)
               if (not ls_has_err(state)) {
-                tokens := tokens_push(tokens, make_token_char_from_str(ch, pos))
+                push(tokens, make_token_char_from_str(ch, pos))
               }
             } else {
 
@@ -377,27 +377,27 @@ lex := (source: str) -> Result<@[Token], str> {
               if (is_digit(c)) {
                 tok := ls_read_number(state)
                 if (not ls_has_err(state)) {
-                  tokens := tokens_push(tokens, tok)
+                  push(tokens, tok)
                 }
               } else {
 
                 // ── Identifier / keyword: alpha start ────────────────────────
                 if (is_alpha(c)) {
                   tok := ls_read_ident(state)
-                  tokens := tokens_push(tokens, tok)
+                  push(tokens, tok)
                 } else {
 
                   // ── Multi-char operators (:=, ->, ->, ==, !=, <=, >=) ─────
                   multi_kind, multi_n := ls_try_multi_op(state)
                   if (multi_n > 0) {
-                    tokens := tokens_push(tokens, Token { kind: multi_kind, pos: pos })
+                    push(tokens, Token { kind: multi_kind, pos: pos })
                     state  := ls_advance_col(state, multi_n)
                   } else {
 
                     // ── Single-char operators ─────────────────────────────────
                     match ls_try_single_op(c) {
                       Some(k) -> {
-                        tokens := tokens_push(tokens, Token { kind: k, pos: pos })
+                        push(tokens, Token { kind: k, pos: pos })
                         state  := ls_advance_col(state, 1)
                       }
                       none -> {
@@ -420,7 +420,7 @@ lex := (source: str) -> Result<@[Token], str> {
   if (ls_has_err(state)) {
     Err(ls_get_err(state))
   } else {
-    tokens := tokens_push(tokens, Token { kind: TokenKind.Eof, pos: ls_pos(state) })
+    push(tokens, Token { kind: TokenKind.Eof, pos: ls_pos(state) })
     Ok(tokens)
   }
 }

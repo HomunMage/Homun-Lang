@@ -183,17 +183,6 @@ pub fn ls_try_multi_op(s: LexState) -> (TokenKind, i64) {
     }
 }
 
-// ── Token list helpers ────────────────────────────────────────────────────────
-
-pub fn tokens_new() -> Vec<Token> {
-    vec![]
-}
-
-pub fn tokens_push(mut ts: Vec<Token>, t: Token) -> Vec<Token> {
-    ts.push(t);
-    ts
-}
-
 // ── Helpers for lexer.hom inner-loop migration ──────────────────────────────
 
 /// Current position index.
@@ -221,16 +210,6 @@ pub fn ls_substr(s: LexState, start: i64, end: i64) -> String {
     s.chars[start as usize..end as usize].iter().collect()
 }
 
-/// String length (number of chars).
-pub fn str_len(s: String) -> i64 {
-    s.len() as i64
-}
-
-/// String contains a character (given as 1-char string).
-pub fn str_contains(s: String, ch: String) -> bool {
-    s.contains(&ch)
-}
-
 /// Parse a string as an integer (i32). Returns (true, value) on success, (false, 0) on failure.
 pub fn parse_int_result(s: String) -> (bool, i32) {
     match s.parse::<i32>() {
@@ -247,13 +226,12 @@ pub fn parse_float_result(s: String) -> (bool, f32) {
     }
 }
 
-/// Create an empty String.
 pub fn str_new() -> String {
     String::new()
 }
 
-/// Build a string by appending a 1-char string to an existing string.
 pub fn str_push(mut s: String, ch: String) -> String {
     s.push_str(&ch);
     s
 }
+

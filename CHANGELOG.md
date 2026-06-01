@@ -6,6 +6,22 @@ Branches: `history` (spec drafts), `haskell` (Haskell compiler), `rust` (Rust re
 
 ---
 
+### v0.92 — 2026-06-01 — AST robustness + kill `dep/` + indirect-recursion auto-Box
+
+Net diff: **+380 / −721** across 15 files.
+
+- AST 100% positional: `Lambda` named-field → 6-field positional; delete 10 Rust accessors/constructors
+- New `LValue` enum: `Stmt.Assign(LValue, Expr)` restricts lhs to valid targets
+- `BindMut` now carries attrs `@[str]`, aligned with `Bind`
+- Removed dead `LoadRon`/`SaveRon` variants (never constructed by parser)
+- Killed `dep/` directory: content → `codegen_imp.rs`, lib.rs rewired to `use crate::ast::*`
+- Auto-Box supports indirect recursion (all enum names registered upfront in pre-pass)
+- Type-specific helpers → generics: `vec_extend<T>`, `vec_push<T>`, `vec_pop<T>`
+- Docs: fixed Compiler-Design.md (6 errors), cleaned .gitignore, removed cryptic Fx comments
+- 147 tests, fmt clean, clippy clean
+
+---
+
 ### v0.91 — 2026-05-29 — `--import` stage 3: migrate ~20 lexer/parser/sema dispatch helpers from `_imp.rs` to `.hom` (Hom:Rs 1.92 → 2.65)
 
 Stage 3 of the `--import` rollout. With `parser.hom` now consuming `--import src/lexer.hom`, lexer's `TokenKind` variants are visible cross-file — so token inspection, matching, and keyword/single-op dispatch can finally live in `.hom`. Net diff: **+551 / −613** across 9 files; Hom:Rs source ratio jumps from 1.92 to 2.65.

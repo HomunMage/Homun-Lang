@@ -47,41 +47,12 @@ pub type ResolveFileResult = Result<Vec<String>, String>;
 /// Return type of resolve / resolve_module: Ok(program) or Err(message).
 pub type ResolveProgramResult = Result<ResolvedProgram, String>;
 
-// ── ResolvedFile constructors and accessors ───────────────────────────────────
-// ResolvedFile is defined in resolver.hom; path is now String (not PathBuf).
-
-pub fn make_resolved_file(
-    path: String,
-    rust_code: String,
-    exports: Vec<String>,
-) -> ResolvedFile {
-    ResolvedFile {
-        path,
-        rust_code,
-        exports,
-    }
+pub fn make_resolved_file(path: String, rust_code: String, exports: Vec<String>) -> ResolvedFile {
+    ResolvedFile { path, rust_code, exports }
 }
-
-pub fn resolved_file_path(f: ResolvedFile) -> String {
-    f.path.clone()
-}
-
-pub fn resolved_file_rust_code(f: ResolvedFile) -> String {
-    f.rust_code
-}
-
-pub fn resolved_file_exports(f: ResolvedFile) -> Vec<String> {
-    f.exports
-}
-
-// ── ResolvedProgram constructor and accessor ──────────────────────────────────
 
 pub fn make_resolved_program(files: Vec<ResolvedFile>) -> ResolvedProgram {
     ResolvedProgram { files }
-}
-
-pub fn resolved_program_files(p: ResolvedProgram) -> Vec<ResolvedFile> {
-    p.files
 }
 
 // ── ResolverState constructor ────────────────────────────────────────────────
@@ -104,19 +75,13 @@ pub fn resolver_new(skip_embed: bool) -> ResolverState {
 // Using named function calls causes homunc's codegen to add .clone() to every
 // argument, avoiding the move error.
 
-pub fn vec_push_str(mut v: Vec<String>, item: String) -> Vec<String> {
+pub fn vec_push<T>(mut v: Vec<T>, item: T) -> Vec<T> {
     v.push(item);
     v
 }
 
-pub fn vec_pop_str(v: Vec<String>) -> Vec<String> {
+pub fn vec_pop<T: Clone>(v: Vec<T>) -> Vec<T> {
     v[..v.len() - 1].to_vec()
-}
-
-// ResolvedFile is defined by resolver.hom's generated code (forward ref — fine in Rust).
-pub fn files_push_rf(mut v: Vec<ResolvedFile>, f: ResolvedFile) -> Vec<ResolvedFile> {
-    v.push(f);
-    v
 }
 
 // ── String→String dict helpers ───────────────────────────────────────────────

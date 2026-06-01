@@ -103,40 +103,6 @@ pub fn mk_expr_slice(
         step.map(Box::new),
     )
 }
-pub fn mk_expr_lambda(
-    params: Vec<Param>,
-    ret_ty: Option<TypeExpr>,
-    void_mark: Option<TypeExpr>,
-    stmts: Vec<Stmt>,
-    final_expr: Expr,
-) -> Expr {
-    Expr::Lambda {
-        generics: vec![],
-        params,
-        ret_ty,
-        void_mark,
-        stmts,
-        final_expr: Box::new(final_expr),
-    }
-}
-
-pub fn mk_expr_lambda_generics(
-    generics: Vec<String>,
-    params: Vec<Param>,
-    ret_ty: Option<TypeExpr>,
-    void_mark: Option<TypeExpr>,
-    stmts: Vec<Stmt>,
-    final_expr: Expr,
-) -> Expr {
-    Expr::Lambda {
-        generics,
-        params,
-        ret_ty,
-        void_mark,
-        stmts,
-        final_expr: Box::new(final_expr),
-    }
-}
 pub fn mk_expr_for(var: String, iter: Expr, stmts: Vec<Stmt>, final_expr: Option<Expr>) -> Expr {
     Expr::For(var, Box::new(iter), stmts, final_expr.map(Box::new))
 }

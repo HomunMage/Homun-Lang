@@ -344,6 +344,15 @@ split_block := (stmts: @[Stmt]) -> (@[Stmt], Expr) {
   }
 }
 
+expr_to_lvalue := (e: Expr) -> LValue {
+  match e {
+    Expr.Var(n) -> LValue.Var(n)
+    Expr.Field(base, name) -> LValue.Field(expr_to_lvalue(base), name)
+    Expr.Index(base, idx) -> LValue.Index(expr_to_lvalue(base), idx)
+    _ -> LValue.Var("_")
+  }
+}
+
 push_name_expr_pair := (pairs: @[(str, Expr)], name: str, expr: Expr) -> @[(str, Expr)] {
   push(pairs, (name, expr))
   pairs
@@ -750,7 +759,7 @@ parse_block_bind := () -> Stmt {
   if (ps_check("MutAssign")) {
     ps_advance()
     rhs := parse_expr()
-    => Stmt.BindMut(name, rhs)
+    => Stmt.BindMut(name, rhs, @[])
   }
 
   // Lvalue: expr[idx] := rhs  or  expr.field := rhs
@@ -760,7 +769,7 @@ parse_block_bind := () -> Stmt {
     if (ps_check("Assign")) {
       ps_advance()
       rhs := parse_expr()
-      => Stmt.Assign(lhs, rhs)
+      => Stmt.Assign(expr_to_lvalue(lhs), rhs)
     }
     => Stmt.Expression(lhs)
   }
@@ -1110,7 +1119,7 @@ try_parse_lambda := () -> Expr {
   void_mark := if (rk == "Underscore") { Some(TypeExpr.Void) } else { none }
   stmts := parse_block_stmts_braced()
   ss, fe := split_block(stmts)
-  mk_expr_lambda(params, ret_ty, void_mark, ss, fe)
+  Expr.Lambda(@[], params, ret_ty, void_mark, ss, fe)
 }
 
 parse_param_list := () -> @[Param] {
@@ -1573,7 +1582,7 @@ parse_generic_lambda := () -> Expr {
   void_mark := if (rk == "Underscore") { Some(TypeExpr.Void) } else { none }
   stmts := parse_block_stmts_braced()
   ss, fe := split_block(stmts)
-  mk_expr_lambda_generics(generics, params, ret_ty, void_mark, ss, fe)
+  Expr.Lambda(generics, params, ret_ty, void_mark, ss, fe)
 }
 
 parse_generic_param_list := () -> @[str] {

@@ -103,19 +103,11 @@ stmts_bound := (env: Scope, stmts: @[Stmt]) -> Scope {
   while (i < n) {
     match stmts[i] {
       Stmt.Bind(name, _, _)
-        | Stmt.BindMut(name, _)
+        | Stmt.BindMut(name, _, _)
         | Stmt.StructDef(name, _, _)
         | Stmt.EnumDef(name, _, _)
         | Stmt.ThreadLocal(name, _) -> { result := scope_insert(result, name) }
-      Stmt.BindPat(pat, _) -> {
-        names := pat_names(pat)
-        j := 0
-        while (j < len(names)) {
-          result := scope_insert(result, names[j])
-          j := j + 1
-        }
-      }
-      Stmt.BindPatMut(pat, _) -> {
+      Stmt.BindPat(pat, _) | Stmt.BindPatMut(pat, _) -> {
         names := pat_names(pat)
         j := 0
         while (j < len(names)) {
@@ -145,19 +137,11 @@ check_stmts := (env: Scope, stmts: @[Stmt]) -> @[str] {
     errs := errs_join(errs, check_stmt(local_env, s))
     match s {
       Stmt.Bind(name, _, _)
-        | Stmt.BindMut(name, _)
+        | Stmt.BindMut(name, _, _)
         | Stmt.StructDef(name, _, _)
         | Stmt.EnumDef(name, _, _)
         | Stmt.ThreadLocal(name, _) -> { local_env := scope_insert(local_env, name) }
-      Stmt.BindPat(pat, _) -> {
-        names := pat_names(pat)
-        j := 0
-        while (j < len(names)) {
-          local_env := scope_insert(local_env, names[j])
-          j := j + 1
-        }
-      }
-      Stmt.BindPatMut(pat, _) -> {
+      Stmt.BindPat(pat, _) | Stmt.BindPatMut(pat, _) -> {
         names := pat_names(pat)
         j := 0
         while (j < len(names)) {
@@ -179,16 +163,14 @@ check_stmts := (env: Scope, stmts: @[Stmt]) -> @[str] {
 check_stmt := (env: Scope, stmt: Stmt) -> @[str] {
   match stmt {
     Stmt.Bind(_, expr, _) -> check_expr(env, expr)
-    Stmt.BindMut(_, expr) -> check_expr(env, expr)
+    Stmt.BindMut(_, expr, _) -> check_expr(env, expr)
     Stmt.Expression(expr) -> check_expr(env, expr)
-    Stmt.BindPat(_, expr) -> check_expr(env, expr)
-    Stmt.BindPatMut(_, expr) -> check_expr(env, expr)
-    Stmt.Assign(lhs, rhs) -> errs_join(check_expr(env, lhs), check_expr(env, rhs))
+    Stmt.BindPat(_, expr) | Stmt.BindPatMut(_, expr) -> check_expr(env, expr)
+    Stmt.Assign(lhs, rhs) -> errs_join(check_lvalue(env, lhs), check_expr(env, rhs))
     Stmt.ThreadLocal(name, init) -> {
-      if (expr_is_lambda(init)) {
-        @["SEMA ERROR: @thread_local binding '${name}' cannot be a lambda"]
-      } else {
-        check_expr(env, init)
+      match init {
+        Expr.Lambda(_, _, _, _, _, _) -> @["SEMA ERROR: @thread_local binding '${name}' cannot be a lambda"]
+        _ -> check_expr(env, init)
       }
     }
     _ -> @[]
@@ -196,59 +178,60 @@ check_stmt := (env: Scope, stmt: Stmt) -> @[str] {
 }
 
 
+// ─── check_lvalue ────────────────────────────────────────────────────────────
+
+check_lvalue := (env: Scope, lv: LValue) -> @[str] {
+  match lv {
+    LValue.Var(name) -> {
+      if (name == "_" or scope_contains(env, name)) { @[] }
+      else { @["SEMA ERROR: undefined reference '${name}'"] }
+    }
+    LValue.Field(base, _) -> check_lvalue(env, base)
+    LValue.Index(base, idx) -> errs_join(check_lvalue(env, base), check_expr(env, idx))
+  }
+}
+
 // ─── check_expr ──────────────────────────────────────────────────────────────
 // Check an expression for undefined references.  Returns a list of error
 // message strings (empty means no errors).
 //
-// Expr dispatch uses direct match — variants whose payload is Box<Expr> keep
-// accessor calls inside the arm because F8b auto-deref doesn't apply when the
-// enum (Expr) is defined cross-file (in ast.hom). Lambda has named fields and
-// is handled via early-out before the match.
+// Expr dispatch uses direct match. Option<Box<Expr>> fields keep accessor
+// calls because auto-deref can't peel Option.
 
 check_expr := (env: Scope, expr: Expr) -> @[str] {
-  // Lambda has named-field variant — can't destructure positionally in Homun
-  // patterns, so handle it via accessor before the direct match.
-  if (expr_is_lambda(expr)) {
-    params       := expr_lambda_params(expr)
-    lam_stmts    := expr_lambda_stmts(expr)
-    fe           := expr_lambda_final(expr)
-    explicit_gen := expr_lambda_generics(expr)
-    // Check: explicit generics + untyped params in same fn is an error
-    mixing_errs := if (len(explicit_gen) > 0) {
-      has_untyped := false
-      pi2 := 0
-      pn2 := len(params)
-      while (pi2 < pn2) {
-        p := params[pi2]
-        if (p.name != "_") {
-          if (p.ty.is_none()) { has_untyped := true }
+  e_dispatch := expr
+  match e_dispatch {
+    Expr.Lambda(explicit_gen, params, _, _, lam_stmts, fe) -> {
+      mixing_errs := if (len(explicit_gen) > 0) {
+        has_untyped := false
+        pi2 := 0
+        pn2 := len(params)
+        while (pi2 < pn2) {
+          p := params[pi2]
+          if (p.name != "_") {
+            if (p.ty.is_none()) { has_untyped := true }
+          }
+          pi2 := pi2 + 1
         }
-        pi2 := pi2 + 1
-      }
-      if (has_untyped) {
-        @[str("SEMA ERROR: cannot mix explicit <T:...> generics with implicit untyped params in same function")]
+        if (has_untyped) {
+          @[str("SEMA ERROR: cannot mix explicit <T:...> generics with implicit untyped params in same function")]
+        } else {
+          @[]
+        }
       } else {
         @[]
       }
-    } else {
-      @[]
+      env2 := scope_clone(env)
+      pn := len(params)
+      pi := 0
+      while (pi < pn) {
+        env2 := scope_insert(env2, params[pi].name)
+        pi := pi + 1
+      }
+      lam_errs := check_stmts(env2, lam_stmts)
+      env_final := stmts_bound(env2, lam_stmts)
+      errs_join(mixing_errs, errs_join(lam_errs, check_expr(env_final, fe)))
     }
-    env2       := scope_clone(env)
-    pn := len(params)
-    pi := 0
-    while (pi < pn) {
-      env2 := scope_insert(env2, params[pi].name)
-      pi := pi + 1
-    }
-    lam_errs  := check_stmts(env2, lam_stmts)
-    env_final := stmts_bound(env2, lam_stmts)
-    => errs_join(mixing_errs, errs_join(lam_errs, check_expr(env_final, fe)))
-  }
-  // Most arms use direct positional bindings (F9 cross-file auto-deref).
-  // Remaining accessor calls: Option<Box<Expr>> fields (Slice from/to/step,
-  // If else, For/While final, Break) where F9 can't auto-deref through Option.
-  e_dispatch := expr
-  match e_dispatch {
     Expr.Var(name) -> {
       if (name == "_" or scope_contains(env, name)) {
         @[]
@@ -401,8 +384,6 @@ check_expr := (env: Scope, expr: Expr) -> @[str] {
       }
     }
     Expr.EarlyReturn(val) -> check_expr(env, val)
-    Expr.LoadRon(path, _) -> check_expr(env, path)
-    Expr.SaveRon(data, path) -> errs_join(check_expr(env, data), check_expr(env, path))
     Expr.TryUnwrap(inner) -> check_expr(env, inner)
     _ -> @[]
   }
@@ -464,7 +445,7 @@ run_sema := (prog: @[Stmt], imported_list: @[str], skip_undef: bool) -> @[str] {
   while (pi < pn) {
     match prog[pi] {
       Stmt.Bind(name, _, _)
-        | Stmt.BindMut(name, _)
+        | Stmt.BindMut(name, _, _)
         | Stmt.StructDef(name, _, _)
         | Stmt.EnumDef(name, _, _)
         | Stmt.ThreadLocal(name, _) -> { top_names := scope_insert(top_names, name) }

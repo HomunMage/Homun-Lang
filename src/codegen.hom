@@ -2,33 +2,45 @@
 //
 // Ports codegen.rs logic to .hom using:
 //   src/scope.hom          — Scope (@[str]) wrapper
-//   dep/codegen_helpers.rs — ind, codegen_string, codegen_type, etc.
-//   src/codegen_imp.rs     — RsContent/HomFiles type aliases, accessors
+//   src/codegen_imp.rs     — type aliases, TLS registries, Expr accessors
 //
-// Stmt/Pat/TypeExpr/Expr dispatch uses direct match arms on AST variants.
-// F9 cross-file Box<T> auto-deref: when matching a variant whose field is
-// Box<Expr> (because Expr is self-recursive, defined in ast.hom), positional
-// bindings like `Expr.Field(base, name)` auto-deref so the body sees `base: Expr`.
-// codegen_program_with_resolved's pre-pass populates the variant_field_types
-// registry for cross-file enums via DFS-ordered codegen passes (see line ~1576).
-// MIGRATION NOTE: ~100 expr_*/type_* accessors in dep/codegen_helpers.rs predate
-// F9 and are now redundant — match arms can bind Box<T> fields directly.
+// Match arms on self-recursive enum variants (Expr, TypeExpr) auto-deref
+// Box<T> fields via the variant_field_types registry (populated by --import
+// pre-pass or codegen_program_with_resolved's DFS pre-pass).
 // Lambda has named fields and is handled via early-out before the match.
 //
-// Public API (called from lib.rs mod codegen_hom after P2.4 wiring):
+// Public API:
 //   codegen_program_with_resolved(prog, hom_files, rs_content) -> str
-//
-// Internal helpers mirror codegen.rs:
-//   pat_names_list, cg_clone_arg, cg_commas, cg_lvalue, cg_pat,
-//   cg_struct_val, cg_general_call, cg_bin_op, cg_print,
-//   has_str_pat_in_arms, cg_arm, cg_expr,
-//   cg_stmts, cg_body, cg_stmt,
-//   cg_top_fn, codegen_top_level_stmt, codegen_program_with_resolved
 
 // `use codegen_imp` sets has_rs_dep=true so homunc skips undefined-reference
-// checks for dep/ functions and runtime functions (join, push, replace, etc.)
+// checks for runtime functions (join, push, replace, etc.)
 use codegen_imp
 use scope
+
+
+// ─── local string/list helpers (migrated from dep/codegen_helpers.rs) ────────
+// Pure utilities expressed directly in .hom over runtime primitives (repeat,
+// join, is_upper, char_at — all in scope via lib.rs `use crate::runtime::*`).
+
+// n levels of 4-space indentation.
+ind := (n: int) -> str { repeat(" ", n * 4) }
+
+// True if the first character of s is uppercase (false on empty string).
+// Distinguishes enum variants (PascalCase) from struct fields in codegen.
+is_upper_first := (s: str) -> bool { not is_empty(s) and is_upper(char_at(s, 0)) }
+
+// Format a generic clause: "<T, U>" when non-empty, "" when empty.
+generics_str := (generics: @[str]) -> str {
+  if (len(generics) == 0) { "" } else { "<" + join(generics, ", ") + ">" }
+}
+
+// True if name is a Homun builtin emitted as a Rust macro (name!(...)).
+// Equality chain (not `in @[...]`) so a String needle compares against str
+// literals without the &String/&str coercion the `in` form can't express.
+is_homun_macro := (name: str) -> bool {
+  name == "range" or name == "len" or name == "filter" or name == "map"
+    or name == "reduce" or name == "slice" or name == "dict" or name == "set"
+}
 
 
 // ─── fn-signature registry (logic) ───────────────────────────────────────────
@@ -47,7 +59,7 @@ register_known_dep_fns := () -> _ {
   fn_defaults_insert("heap_len",      @[none])
   fn_defaults_insert("heap_is_empty", @[none])
 
-  // F11 — set/dict mutators (use set, use dict). First arg is &mut.
+  // set/dict mutators (use set, use dict). First arg is &mut.
   fn_mut_params_insert("set_add",     @[true, false])
   fn_mut_params_insert("set_remove",  @[true, false])
   fn_mut_params_insert("set_clear",   @[true])
@@ -64,8 +76,7 @@ register_known_dep_fns := () -> _ {
 
 // ─── register_external_types ──────────────────────────────────────────────────
 // Pre-register variant field types from an externally-parsed AST (e.g. via
-// --import).  Mirrors the pre-pass in codegen_program_with_resolved so that
-// F9 (match auto-deref) and F12 (construct auto-wrap) work cross-file.
+// --import) so match auto-deref and construct auto-wrap work cross-file.
 
 register_external_types := (stmts: @[Stmt]) -> _ {
   n := len(stmts)
@@ -73,6 +84,7 @@ register_external_types := (stmts: @[Stmt]) -> _ {
   while (j < n) {
     match stmts[j] {
       Stmt.EnumDef(ename, variants, _) -> {
+        register_recursive_type(ename)
         nv := len(variants)
         vi := 0
         while (vi < nv) {
@@ -411,7 +423,7 @@ pat_names_list := (pat: Pat) -> @[str] {
       names := @[]
       i := 0
       while (i < n) {
-        names := vec_extend_strings(names, pat_names_list(pats[i]))
+        names := vec_extend(names, pat_names_list(pats[i]))
         i := i + 1
       }
       names
@@ -453,13 +465,11 @@ cg_commas := (i: int, sc: Scope, items: @[Expr]) -> str {
 // ─── cg_lvalue ────────────────────────────────────────────────────────────────
 // Emit an lvalue for assignment (uses [idx as usize] not .homun_idx).
 
-cg_lvalue := (i: int, sc: Scope, e: Expr) -> str {
-  e_d := e
-  match e_d {
-    Expr.Var(n) -> n
-    Expr.Field(base, name) -> cg_lvalue(i, sc, base) + "." + name
-    Expr.Index(base, idx) -> cg_lvalue(i, sc, base) + "[" + cg_expr(i, sc, idx) + " as usize]"
-    _ -> cg_expr(i, sc, e)
+cg_lvalue := (i: int, sc: Scope, lv: LValue) -> str {
+  match lv {
+    LValue.Var(n) -> n
+    LValue.Field(base, name) -> cg_lvalue(i, sc, base) + "." + name
+    LValue.Index(base, idx) -> cg_lvalue(i, sc, base) + "[" + cg_expr(i, sc, idx) + " as usize]"
   }
 }
 
@@ -564,7 +574,7 @@ walk_pat_box_names := (pat: Pat, ty: TypeExpr, enum_name: str) -> @[str] {
           i := 0
           while (i < n) {
             names := walk_pat_box_names(pats[i], tys[i], enum_name)
-            result := vec_extend_strings(result, names)
+            result := vec_extend(result, names)
             i := i + 1
           }
           result
@@ -595,7 +605,7 @@ pat_box_var_names := (pat: Pat) -> @[str] {
           i := 0
           while (i < n) {
             names := walk_pat_box_names(sub_pats[i], fields[i], enum_name)
-            result := vec_extend_strings(result, names)
+            result := vec_extend(result, names)
             i := i + 1
           }
           result
@@ -622,11 +632,10 @@ cg_struct_val := (i: int, sc: Scope, e: Expr) -> str {
 // ─── cg_general_call ──────────────────────────────────────────────────────────
 // Emit f(clone_args) for a general function call.
 //
-// F12 construct-side Box<T> auto-wrap (mirrors F9 match-side auto-deref):
-// when `f` is a variant constructor `EnumName.VariantName` and a field's
-// declared type is the enum itself (so codegen wrapped it as Box<T>),
-// wrap the corresponding arg with `Box::new(...)`. MVP only handles direct
-// recursive fields; nested Option<T>/Tuple recursion still needs accessors.
+// Construct-side Box<T> auto-wrap: when `f` is a variant constructor and a
+// field's declared type is the enum itself (self-recursive → Box<T>), wrap
+// the arg with `Box::new(...)`. Only handles direct recursive fields;
+// nested Option<T>/Tuple recursion still needs accessors.
 
 // Returns "EnumName.VariantName" if f is a variant constructor, else "".
 detect_variant_qual := (f: Expr) -> str {
@@ -669,7 +678,7 @@ cg_general_call := (i: int, sc: Scope, f: Expr, args: @[Expr]) -> str {
   } else {
     args
   }
-  // F12 variant constructor detection
+  // variant constructor detection (for Box auto-wrap)
   qual := detect_variant_qual(f)
   has_box_info := qual != "" and variant_field_types_known(qual)
   field_tys := if (has_box_info) { variant_field_types_get(qual) } else { @[] }
@@ -872,35 +881,26 @@ cg_arm := (i: int, sc: Scope, arm: MatchArm) -> str {
 // Core expression code generator.  Reads sc but never mutates it.
 
 cg_expr := (i: int, sc: Scope, expr: Expr) -> str {
-  // Lambda has named-field variant — can't destructure positionally in Homun
-  // patterns, so handle it via accessor before the direct match.
-  if (expr_is_lambda(expr)) {
-    params := expr_lambda_params(expr)
-    lam_stmts := expr_lambda_stmts(expr)
-    fe := expr_lambda_final(expr)
-    pn := len(params)
-    param_parts := @[]
-    pi := 0
-    while (pi < pn) {
-      push(param_parts, codegen_param(params[pi]))
-      pi := pi + 1
-    }
-    param_str := join(param_parts, ", ")
-    inner_sc := scope_clone(sc)
-    pi2 := 0
-    while (pi2 < pn) {
-      inner_sc := scope_insert(inner_sc, params[pi2].name)
-      pi2 := pi2 + 1
-    }
-    body_lines := cg_body(i + 1, inner_sc, lam_stmts, fe)
-    => "|" + param_str + "| {\n" + join(body_lines, "\n") + "\n" + ind(i) + "}"
-  }
-  // Most arms now use direct positional bindings (F9 cross-file auto-deref).
-  // Remaining accessor calls: BinOp/UnOp op (string format), Option<Box<Expr>>
-  // fields (Slice from/to/step, If else, For/While final, Break, Range) where
-  // F9 can't auto-deref through Option. These operate on the original `expr`.
   e_dispatch := expr
   match e_dispatch {
+    Expr.Lambda(_, params, _, _, lam_stmts, fe) -> {
+      pn := len(params)
+      param_parts := @[]
+      pi := 0
+      while (pi < pn) {
+        push(param_parts, codegen_param(params[pi]))
+        pi := pi + 1
+      }
+      param_str := join(param_parts, ", ")
+      inner_sc := scope_clone(sc)
+      pi2 := 0
+      while (pi2 < pn) {
+        inner_sc := scope_insert(inner_sc, params[pi2].name)
+        pi2 := pi2 + 1
+      }
+      body_lines := cg_body(i + 1, inner_sc, lam_stmts, fe)
+      "|" + param_str + "| {\n" + join(body_lines, "\n") + "\n" + ind(i) + "}"
+    }
     Expr.Int(n) -> str(n)
     Expr.Float(f) -> str_of(f) + "f32"
     Expr.Bool(b) -> {
@@ -1145,12 +1145,6 @@ cg_expr := (i: int, sc: Scope, expr: Expr) -> str {
       }
     }
     Expr.Continue -> "continue"
-    Expr.LoadRon(path, ty) -> {
-      "ron::from_str::<" + codegen_type(ty) + ">(&std::fs::read_to_string(" + cg_expr(i, sc, path) + ").unwrap()).unwrap()"
-    }
-    Expr.SaveRon(data, path) -> {
-      "std::fs::write(" + cg_expr(i, sc, path) + ", ron::to_string(&" + cg_expr(i, sc, data) + ").unwrap()).unwrap()"
-    }
     Expr.EarlyReturn(val) -> {
       "return " + cg_expr(i, sc, val)
     }
@@ -1179,7 +1173,6 @@ cg_expr := (i: int, sc: Scope, expr: Expr) -> str {
         }
       }
     }
-    _ -> ""
   }
 }
 
@@ -1198,20 +1191,12 @@ cg_stmts := (i: int, sc: Scope, stmts: @[Stmt]) -> (@[str], Scope) {
     push(lines, line)
     match s {
       Stmt.Bind(name, _, _)
-        | Stmt.BindMut(name, _)
+        | Stmt.BindMut(name, _, _)
         | Stmt.StructDef(name, _, _)
         | Stmt.EnumDef(name, _, _) -> {
         sc := scope_insert(sc, name)
       }
-      Stmt.BindPat(pat, _) -> {
-        names := pat_names_list(pat)
-        ni := 0
-        while (ni < len(names)) {
-          sc := scope_insert(sc, names[ni])
-          ni := ni + 1
-        }
-      }
-      Stmt.BindPatMut(pat, _) -> {
+      Stmt.BindPat(pat, _) | Stmt.BindPatMut(pat, _) -> {
         names := pat_names_list(pat)
         ni := 0
         while (ni < len(names)) {
@@ -1247,22 +1232,24 @@ cg_bind_common := (i: int, sc: Scope, name: str, e: Expr) -> str {
   if (is_thread_local_var(name)) {
     => "${ind(i)}${name}_set(${cg_struct_val(i, sc, e)});"
   }
-  if (expr_is_lambda(e)) {
-    params := expr_lambda_params(e)
-    lam_stmts := expr_lambda_stmts(e)
-    fe2 := expr_lambda_final(e)
-    param_parts := @[]
-    for pk in range(len(params)) {
-      push(param_parts, codegen_param(params[pk]))
+  e_lam := e
+  match e_lam {
+    Expr.Lambda(_, params, _, _, lam_stmts, fe2) -> {
+      param_parts := @[]
+      for pk in range(len(params)) {
+        push(param_parts, codegen_param(params[pk]))
+      }
+      param_str := join(param_parts, ", ")
+      inner_sc := scope_clone(sc)
+      for pi in range(len(params)) {
+        inner_sc := scope_insert(inner_sc, params[pi].name)
+      }
+      body_lines := cg_body(i + 1, inner_sc, lam_stmts, fe2)
+      => ind(i) + "let " + name + " = |" + param_str + "| {\n" + join(body_lines, "\n") + "\n" + ind(i) + "};"
     }
-    param_str := join(param_parts, ", ")
-    inner_sc := scope_clone(sc)
-    for pi in range(len(params)) {
-      inner_sc := scope_insert(inner_sc, params[pi].name)
-    }
-    body_lines := cg_body(i + 1, inner_sc, lam_stmts, fe2)
-    ind(i) + "let " + name + " = |" + param_str + "| {\n" + join(body_lines, "\n") + "\n" + ind(i) + "};"
-  } else {
+    _ -> {}
+  }
+  {
     e_d := e
     rhs := match e_d {
       Expr.Var(n) -> if (scope_contains(sc, n)) { n + ".clone()" } else { cg_expr(i, sc, e) }
@@ -1287,7 +1274,7 @@ cg_stmt := (i: int, sc: Scope, stmt: Stmt) -> str {
     Stmt.Bind(name, e, _) -> {
       cg_bind_common(i, sc, name, e)
     }
-    Stmt.BindMut(name, e) -> {
+    Stmt.BindMut(name, e, _) -> {
       cg_bind_common(i, sc, name, e)
     }
     Stmt.BindPat(pat, e) -> {
@@ -1381,7 +1368,7 @@ cg_stmt := (i: int, sc: Scope, stmt: Stmt) -> str {
     }
     Stmt.Assign(lhs, rhs) -> {
       rhs_s := match lhs {
-        Expr.Field(_, _) -> cg_struct_val(i, sc, rhs)
+        LValue.Field(_, _) -> cg_struct_val(i, sc, rhs)
         _ -> cg_expr(i, sc, rhs)
       }
       "${ind(i)}${cg_lvalue(i, sc, lhs)} = ${rhs_s};"
@@ -1405,7 +1392,6 @@ cg_stmt := (i: int, sc: Scope, stmt: Stmt) -> str {
       ind(i) + "#[derive(Debug, Clone, PartialEq)]\n" + ind(i) + "struct " + name + " {\n" + join(field_lines, "\n") + "\n" + ind(i) + "}"
     }
     Stmt.EnumDef(name, variants, _) -> {
-      register_recursive_type(name)
       n := len(variants)
       var_lines := @[]
       vi := 0
@@ -1413,14 +1399,13 @@ cg_stmt := (i: int, sc: Scope, stmt: Stmt) -> str {
         push(var_lines, cg_variant_line(i + 1, variants[vi]))
         vi := vi + 1
       }
-      out := ind(i) + "#[derive(Debug, Clone, PartialEq)]\n" + ind(i) + "enum " + name + " {\n" + join(var_lines, "\n") + "\n" + ind(i) + "}"
-      clear_recursive_types()
-      out
+      ind(i) + "#[derive(Debug, Clone, PartialEq)]\n" + ind(i) + "enum " + name + " {\n" + join(var_lines, "\n") + "\n" + ind(i) + "}"
     }
     Stmt.Expression(e) -> {
       "${ind(i)}${cg_expr(i, sc, e)};"
     }
-    _ -> ""
+    Stmt.InnerAttr(_) -> ""
+    Stmt.ThreadLocal(_, _) -> ""
   }
 }
 
@@ -1561,18 +1546,16 @@ infer_const_ty := (e: Expr) -> str {
 // Pass attrs:=@[] for BindMut callers (BindMut carries no attrs).
 
 cg_top_bind := (i: int, name: str, e: Expr, attrs: @[str]) -> str {
-  if (expr_is_lambda(e)) {
-    params := expr_lambda_params(e)
-    ret_ty := expr_lambda_ret_ty(e)
-    void_mark := expr_lambda_void_mark(e)
-    lam_stmts := expr_lambda_stmts(e)
-    fe2 := expr_lambda_final(e)
-    explicit_gen := expr_lambda_generics(e)
-    fn_str := cg_top_fn(i, name, explicit_gen, params, ret_ty, void_mark, lam_stmts, fe2)
-    "" + emit_attrs(attrs) + fn_str
-  } else {
-    ty_str := infer_const_ty(e)
-    "pub const " + to_upper(name) + ": " + ty_str + " = " + cg_expr(0, scope_new(), e) + ";"
+  e_top := e
+  match e_top {
+    Expr.Lambda(explicit_gen, params, ret_ty, void_mark, lam_stmts, fe2) -> {
+      fn_str := cg_top_fn(i, name, explicit_gen, params, ret_ty, void_mark, lam_stmts, fe2)
+      "" + emit_attrs(attrs) + fn_str
+    }
+    _ -> {
+      ty_str := infer_const_ty(e)
+      "pub const " + to_upper(name) + ": " + ty_str + " = " + cg_expr(0, scope_new(), e) + ";"
+    }
   }
 }
 
@@ -1619,7 +1602,6 @@ codegen_top_level_stmt := (i: int, stmt: Stmt, rs_content: RsContent) -> str {
       }
     }
     Stmt.EnumDef(name, variants, attrs) -> {
-      register_recursive_type(name)
       n := len(variants)
       var_lines := @[]
       vi := 0
@@ -1633,19 +1615,17 @@ codegen_top_level_stmt := (i: int, stmt: Stmt, rs_content: RsContent) -> str {
         if (contains(a, "derive(")) { has_derive := true }
       }
       body := name + " {\n" + join(var_lines, "\n") + "\n}"
-      out := if (has_derive) {
+      if (has_derive) {
         attrs_str + "pub enum " + body
       } else {
         attrs_str + "#[derive(Debug, Clone, PartialEq)]\npub enum " + body
       }
-      clear_recursive_types()
-      out
     }
     Stmt.Bind(name, e, attrs) -> {
       cg_top_bind(i, name, e, attrs)
     }
-    Stmt.BindMut(name, e) -> {
-      cg_top_bind(i, name, e, @[])
+    Stmt.BindMut(name, e, attrs) -> {
+      cg_top_bind(i, name, e, attrs)
     }
     Stmt.BindPatMut(_, _) -> ""
     Stmt.BindPat(_, _) -> ""
@@ -1664,7 +1644,7 @@ codegen_top_level_stmt := (i: int, stmt: Stmt, rs_content: RsContent) -> str {
       push(tl_lines, "pub fn " + tl_name + "_set(val: " + ty_str + ") { " + upper + ".with(|v| *v.borrow_mut() = val); }")
       join(tl_lines, "\n")
     }
-    _ -> ""
+    Stmt.InnerAttr(_) -> ""
   }
 }
 
@@ -1676,7 +1656,21 @@ codegen_top_level_stmt := (i: int, stmt: Stmt, rs_content: RsContent) -> str {
 codegen_program_with_resolved := (prog: @[Stmt], hom_files: HomFiles, rs_content: RsContent) -> str {
   n := len(prog)
   clear_thread_local_vars()
-  // Pre-pass: register variant field types for all top-level enums so that
+  // Pre-pass 0: register all enum names as potentially recursive types.
+  // This enables auto-Box for INDIRECT recursion (e.g. Expr → Control(ControlExpr) → If(Expr)).
+  // Registering all enum names is safe: codegen_type_variant_field only wraps
+  // a field in Box<T> when the field's type name matches a registered enum name,
+  // so non-recursive fields (int, str, Vec<...>) are unaffected.
+  clear_recursive_types()
+  rr := 0
+  while (rr < n) {
+    match prog[rr] {
+      Stmt.EnumDef(ename, _, _) -> register_recursive_type(ename)
+      _ -> {}
+    }
+    rr := rr + 1
+  }
+  // Pre-pass 1: register variant field types for all top-level enums so that
   // cg_arm can detect bindings landing on Box<T> positions. The registry is
   // additive across files so that when this codegen pass runs for a file that
   // imports an enum via `use`, the dependency's variants (registered when its

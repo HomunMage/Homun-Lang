@@ -34,6 +34,13 @@ VariantDef := struct { name: str, fields: @[(Option<str>, TypeExpr)] }
 Param := struct { name: str, ty: Option<TypeExpr>, mutable: bool, default: Option<Expr> }
 
 @derive(Clone, Debug)
+LValue := enum {
+  Var(str)
+  Field(LValue, str)
+  Index(LValue, Expr)
+}
+
+@derive(Clone, Debug)
 Pat := enum {
   Wild
   Var(str)
@@ -67,7 +74,7 @@ Expr := enum {
   BinOp(BinOp, Expr, Expr)
   UnOp(UnOp, Expr)
   Pipe(Expr, Expr)
-  Lambda(generics: @[str], params: @[Param], ret_ty: Option<TypeExpr>, void_mark: Option<TypeExpr>, stmts: @[Stmt], final_expr: Expr)
+  Lambda(@[str], @[Param], Option<TypeExpr>, Option<TypeExpr>, @[Stmt], Expr)
   Call(Expr, @[Expr])
   If(Expr, @[Stmt], Expr, Option<(@[Stmt], Expr)>)
   Match(Expr, @[MatchArm])
@@ -76,8 +83,6 @@ Expr := enum {
   Block(@[Stmt], Expr)
   Break(Option<Expr>)
   Continue
-  LoadRon(Expr, TypeExpr)
-  SaveRon(Expr, Expr)
   Range(Option<Expr>, Option<Expr>, Option<Expr>)
   TryUnwrap(Expr)
   EarlyReturn(Expr)
@@ -86,10 +91,10 @@ Expr := enum {
 @derive(Clone, Debug)
 Stmt := enum {
   Bind(str, Expr, @[str])
-  BindMut(str, Expr)
+  BindMut(str, Expr, @[str])
   BindPat(Pat, Expr)
   BindPatMut(Pat, Expr)
-  Assign(Expr, Expr)
+  Assign(LValue, Expr)
   Use(@[str])
   StructDef(str, @[FieldDef], @[str])
   EnumDef(str, @[VariantDef], @[str])
