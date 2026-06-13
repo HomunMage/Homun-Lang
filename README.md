@@ -10,7 +10,7 @@ Homun is hemi-self-hosting script, never selfhost. It is a template-instantiatio
 
 ## Examples
 
-Playground at : [https://homun.posetmage.com/Homun-Lang/](https://homun.posetmage.com/Homun-Lang/)
+Playground at : [homun-lang.posetmage.com/](homun-lang.posetmage.com/)
 
 see _site/examples
 
