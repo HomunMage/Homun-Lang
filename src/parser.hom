@@ -254,16 +254,16 @@ ps_collect_attr_body := () -> str {
     t := ps_peek_token()
     attr_line := t.pos.line
     ps_advance()
-    parts := @[]
-    done := false
+    parts ::= @[]
+    done ::= false
     while (not done) {
-      if (ps_has_err()) { done := true }
+      if (ps_has_err()) { done ::= true }
       else {
         t2 := ps_peek_token()
-        if (t2.pos.line != attr_line) { done := true }
+        if (t2.pos.line != attr_line) { done ::= true }
         else {
           match t2.kind {
-            TokenKind.Eof -> { done := true }
+            TokenKind.Eof -> { done ::= true }
             _ -> {
               push(parts, token_to_body_str(t2))
               ps_advance()
@@ -279,7 +279,7 @@ ps_collect_attr_body := () -> str {
 ps_collect_outer_attr_body := () -> str {
   if (ps_has_err()) { "" }
   else {
-    parts := @[]
+    parts ::= @[]
     t := ps_peek_token()
     attr_line := t.pos.line
     name := match t.kind {
@@ -370,13 +370,13 @@ new_expr_pairs := () -> @[(Expr, Expr)] { @[] }
 // ─── Entry point ────────────────────────────────────────────────────────────
 
 parse_program := () -> @[Stmt] {
-  stmts := @[]
-  done := false
-  at_top := true
+  stmts ::= @[]
+  done ::= false
+  at_top ::= true
   while (not done) {
     k := ps_peek_kind()
     if (k == "Eof" or k == "RBrace") {
-      done := true
+      done ::= true
     } else {
       if (k == "At" and ps_peek_next_kind() == "Bang") {
         if (at_top) {
@@ -385,36 +385,36 @@ parse_program := () -> @[Stmt] {
           push(stmts, Stmt.InnerAttr(body))
         } else {
           ps_set_err("@! inner attribute must appear before any declarations")
-          done := true
+          done ::= true
         }
       } else {
         if (k == "At" and ps_peek_next_kind() == "Ident") {
           // Collect one or more outer attrs: @ident...
-          outer_attrs := @[]
+          outer_attrs ::= @[]
           while (ps_check("At") and ps_peek_next_kind() == "Ident") {
             ps_advance()
             body := ps_collect_outer_attr_body()
-            outer_attrs := outer_attrs + @[body]
+            outer_attrs ::= outer_attrs + @[body]
           }
           // Expect a decl-starter after attrs
           k2 := ps_peek_kind()
           if (k2 == "Ident") {
-            at_top := false
+            at_top ::= false
             push(stmts, parse_top_bind_attrs(outer_attrs))
           } else {
             ps_set_err("attribute must precede a struct, enum, or top-level binding")
-            done := true
+            done ::= true
           }
         } else {
           if (k == "Use") {
-            at_top := false
+            at_top ::= false
             push(stmts, parse_use())
           } else {
             if (k == "Ident") {
-              at_top := false
+              at_top ::= false
               push(stmts, parse_top_bind())
             } else {
-              done := true
+              done ::= true
             }
           }
         }
@@ -452,12 +452,12 @@ parse_top_bind := () -> Stmt {
   k := ps_peek_kind()
   if (k == "Struct") {
     ps_advance()
-    fields := parse_brace_fields()
+    fields ::= parse_brace_fields()
     Stmt.StructDef(name, fields, @[])
   } else {
     if (k == "Enum") {
       ps_advance()
-      variants := parse_brace_variants()
+      variants ::= parse_brace_variants()
       Stmt.EnumDef(name, variants, @[])
     } else {
       rhs := parse_expr()
@@ -478,12 +478,12 @@ parse_top_bind_attrs := (attrs: @[str]) -> Stmt {
   k := ps_peek_kind()
   if (k == "Struct") {
     ps_advance()
-    fields := parse_brace_fields()
+    fields ::= parse_brace_fields()
     Stmt.StructDef(name, fields, attrs)
   } else {
     if (k == "Enum") {
       ps_advance()
-      variants := parse_brace_variants()
+      variants ::= parse_brace_variants()
       Stmt.EnumDef(name, variants, attrs)
     } else {
       rhs := parse_expr()
@@ -494,12 +494,12 @@ parse_top_bind_attrs := (attrs: @[str]) -> Stmt {
 
 parse_brace_fields := () -> @[FieldDef] {
   ps_expect("LBrace")
-  fields := @[]
-  done := false
+  fields ::= @[]
+  done ::= false
   while (not done) {
     k := ps_peek_kind()
     if (k == "RBrace") {
-      done := true
+      done ::= true
     } else {
       if (k == "Ident") {
         name := ps_peek_ident()
@@ -509,7 +509,7 @@ parse_brace_fields := () -> @[FieldDef] {
         ps_consume("Comma")
         push(fields, FieldDef { name: name, ty: Some(ty) })
       } else {
-        done := true
+        done ::= true
       }
     }
   }
@@ -519,12 +519,12 @@ parse_brace_fields := () -> @[FieldDef] {
 
 parse_brace_variants := () -> @[VariantDef] {
   ps_expect("LBrace")
-  variants := @[]
-  done := false
+  variants ::= @[]
+  done ::= false
   while (not done) {
     k := ps_peek_kind()
     if (k == "RBrace") {
-      done := true
+      done ::= true
     } else {
       if (k == "Ident") {
         name := ps_peek_ident()
@@ -534,8 +534,8 @@ parse_brace_variants := () -> @[VariantDef] {
           // Named fields: Variant(field: Type, ...) — ident followed by colon
           is_named := ps_peek_kind() == "Ident" and ps_peek_next_kind() == "Colon"
           if (is_named) {
-            fnames := @[]
-            ftys := @[]
+            fnames ::= @[]
+            ftys ::= @[]
             fname := ps_advance_ident()
             ps_expect("Colon")
             fty := parse_type_expr()
@@ -554,7 +554,7 @@ parse_brace_variants := () -> @[VariantDef] {
             push(variants, mk_variantdef_multi(name, fnames, ftys))
           } else {
             // Positional fields (single or multi)
-            all_tys := @[parse_type_expr()]
+            all_tys ::= @[parse_type_expr()]
             while (ps_consume("Comma")) {
               if (ps_check("RParen")) { break }
               push(all_tys, parse_type_expr())
@@ -572,7 +572,7 @@ parse_brace_variants := () -> @[VariantDef] {
           push(variants, VariantDef { name: name, fields: @[] })
         }
       } else {
-        done := true
+        done ::= true
       }
     }
   }
@@ -583,12 +583,12 @@ parse_brace_variants := () -> @[VariantDef] {
 // ─── Block statements ───────────────────────────────────────────────────────
 
 parse_block_stmts := () -> @[Stmt] {
-  stmts := @[]
-  done := false
+  stmts ::= @[]
+  done ::= false
   while (not done) {
     k := ps_peek_kind()
     if (k == "RBrace" or k == "Eof") {
-      done := true
+      done ::= true
     } else {
       if (k == "FatArrow") {
         ps_advance()
@@ -599,10 +599,10 @@ parse_block_stmts := () -> @[Stmt] {
           // Try struct destructure: {x: a, y: b} := expr
           sd_stmts := try_parse_struct_destruct()
           if (len(sd_stmts) > 0) {
-            si := 0
+            si ::= 0
             while (si < len(sd_stmts)) {
               push(stmts, sd_stmts[si])
-              si := si + 1
+              si ::= si + 1
             }
           } else {
             e := parse_expr()
@@ -637,26 +637,26 @@ try_parse_struct_destruct := () -> @[Stmt] {
   ps_advance()
 
   // Parse field:binding pairs
-  fields := @[]
-  bindings := @[]
-  ok := true
+  fields ::= @[]
+  bindings ::= @[]
+  ok ::= true
 
   while (ok and not ps_check("RBrace")) {
     fk := ps_peek_kind()
     if (fk != "Ident") {
-      ok := false
+      ok ::= false
     }
     if (ok) {
       field := ps_peek_ident()
       ps_advance()
       if (not ps_check("Colon")) {
-        ok := false
+        ok ::= false
       }
       if (ok) {
         ps_advance()
         bk := ps_peek_kind()
         if (bk != "Ident") {
-          ok := false
+          ok ::= false
         }
         if (ok) {
           binding := ps_peek_ident()
@@ -692,14 +692,14 @@ try_parse_struct_destruct := () -> @[Stmt] {
   rhs := parse_expr()
 
   // Desugar: _sd0 := rhs; binding := _sd0.field; ...
-  result := @[]
+  result ::= @[]
   tmp_name := ps_gensym("_sd")
   push(result, Stmt.Bind(tmp_name, rhs, @[]))
-  i := 0
+  i ::= 0
   while (i < len(fields)) {
     field_expr := Expr.Field(Expr.Var(tmp_name), fields[i])
     push(result, Stmt.Bind(bindings[i], field_expr, @[]))
-    i := i + 1
+    i ::= i + 1
   }
   result
 }
@@ -716,7 +716,7 @@ parse_block_bind := () -> Stmt {
 
   // Tuple bind: a, b := expr
   if (ps_check("Comma")) {
-    names := @[name]
+    names ::= @[name]
     while (ps_consume("Comma")) {
       nk := ps_peek_kind()
       if (nk == "Ident") {
@@ -736,13 +736,13 @@ parse_block_bind := () -> Stmt {
     if (ps_check("Assign")) {
       ps_advance()
       rhs := parse_expr()
-      pats := names | map((n) -> { if (n == "_") { Pat.Wild } else { Pat.Var(n) } })
+      pats ::= names | map((n) -> { if (n == "_") { Pat.Wild } else { Pat.Var(n) } })
       => Stmt.BindPat(Pat.Tuple(pats), rhs)
     }
     if (ps_check("MutAssign")) {
       ps_advance()
       rhs := parse_expr()
-      pats := names | map((n) -> { if (n == "_") { Pat.Wild } else { Pat.Var(n) } })
+      pats ::= names | map((n) -> { if (n == "_") { Pat.Wild } else { Pat.Var(n) } })
       => Stmt.BindPatMut(Pat.Tuple(pats), rhs)
     }
     ps_restore(saved)
@@ -782,7 +782,7 @@ parse_block_bind := () -> Stmt {
 
 parse_block_stmts_braced := () -> @[Stmt] {
   ps_expect("LBrace")
-  stmts := parse_block_stmts()
+  stmts ::= parse_block_stmts()
   ps_expect("RBrace")
   stmts
 }
@@ -859,7 +859,7 @@ parse_cmp := () -> Expr {
 
 parse_add_sub := () -> Expr {
   lhs ::= parse_mul_div()
-  done := false
+  done ::= false
   while (not done) {
     k := ps_peek_kind()
     if (k == "Plus") {
@@ -872,7 +872,7 @@ parse_add_sub := () -> Expr {
         rhs := parse_mul_div()
         lhs ::= Expr.BinOp(BinOp.Sub, lhs, rhs)
       } else {
-        done := true
+        done ::= true
       }
     }
   }
@@ -881,7 +881,7 @@ parse_add_sub := () -> Expr {
 
 parse_mul_div := () -> Expr {
   lhs ::= parse_unary()
-  done := false
+  done ::= false
   while (not done) {
     k := ps_peek_kind()
     if (k == "Star") {
@@ -899,7 +899,7 @@ parse_mul_div := () -> Expr {
           rhs := parse_unary()
           lhs ::= Expr.BinOp(BinOp.Mod, lhs, rhs)
         } else {
-          done := true
+          done ::= true
         }
       }
     }
@@ -919,7 +919,7 @@ parse_unary := () -> Expr {
 
 parse_postfix := () -> Expr {
   e ::= parse_atom()
-  done := false
+  done ::= false
   while (not done) {
     k := ps_peek_kind()
     if (k == "Dot") {
@@ -967,7 +967,7 @@ parse_postfix := () -> Expr {
             ps_advance()
             e ::= Expr.TryUnwrap(e)
           } else {
-            done := true
+            done ::= true
           }
         }
       }
@@ -1057,7 +1057,7 @@ parse_atom := () -> Expr {
     name := ps_peek_ident()
     ps_advance()
     if (ps_check("LBrace") and is_upper(name)) {
-      fields := parse_struct_lit_fields()
+      fields ::= parse_struct_lit_fields()
       => Expr.Struct(Some(name), fields)
     }
     => Expr.Var(name)
@@ -1086,7 +1086,7 @@ parse_lambda_or_paren := () -> Expr {
       ps_advance()
       rest := parse_expr_sep("RParen")
       ps_expect("RParen")
-      items := @[e] + rest
+      items ::= @[e] + rest
       Expr.Tuple(items)
     } else {
       ps_expect("RParen")
@@ -1097,7 +1097,7 @@ parse_lambda_or_paren := () -> Expr {
 
 try_parse_lambda := () -> Expr {
   ps_expect("LParen")
-  params := parse_param_list()
+  params ::= parse_param_list()
   ps_expect("RParen")
   if (not ps_check("Arrow")) {
     ps_set_err("not a lambda")
@@ -1117,7 +1117,7 @@ try_parse_lambda := () -> Expr {
     }
   }
   void_mark := if (rk == "Underscore") { Some(TypeExpr.Void) } else { none }
-  stmts := parse_block_stmts_braced()
+  stmts ::= parse_block_stmts_braced()
   ss, fe := split_block(stmts)
   Expr.Lambda(@[], params, ret_ty, void_mark, ss, fe)
 }
@@ -1126,7 +1126,7 @@ parse_param_list := () -> @[Param] {
   if (ps_check("RParen")) {
     @[]
   } else {
-    params := @[parse_one_param()]
+    params ::= @[parse_one_param()]
     while (ps_consume("Comma")) {
       if (ps_check("RParen")) {
         break
@@ -1174,7 +1174,7 @@ parse_expr_sep := (stop: str) -> @[Expr] {
   if (ps_check(stop)) {
     @[]
   } else {
-    items := @[parse_expr()]
+    items ::= @[parse_expr()]
     while (ps_consume("Comma")) {
       if (ps_check(stop)) {
         break
@@ -1204,7 +1204,7 @@ parse_list := () -> Expr {
     ps_advance()
     Expr.List(@[])
   } else {
-    items := parse_expr_sep("RBracket")
+    items ::= parse_expr_sep("RBracket")
     ps_expect("RBracket")
     Expr.List(items)
   }
@@ -1236,7 +1236,7 @@ parse_dict_or_set := () -> Expr {
       Expr.Dict(pairs)
     } else {
       // Set: @{a, b, ...}
-      items := @[first]
+      items ::= @[first]
       while (ps_consume("Comma")) {
         if (ps_check("RBrace")) { break }
         push(items, parse_expr())
@@ -1250,11 +1250,11 @@ parse_dict_or_set := () -> Expr {
 parse_struct_lit_fields := () -> @[(str, Expr)] {
   ps_expect("LBrace")
   fields ::= new_name_expr_pairs()
-  done := false
+  done ::= false
   while (not done) {
     k := ps_peek_kind()
     if (k == "RBrace") {
-      done := true
+      done ::= true
     } else {
       if (k == "Ident") {
         name := ps_peek_ident()
@@ -1264,7 +1264,7 @@ parse_struct_lit_fields := () -> @[(str, Expr)] {
         ps_consume("Comma")
         fields ::= push_name_expr_pair(fields, name, v)
       } else {
-        done := true
+        done ::= true
       }
     }
   }
@@ -1296,7 +1296,7 @@ parse_match_expr := () -> Expr {
   ps_expect("Match")
   scrut := parse_expr()
   ps_expect("LBrace")
-  arms := @[]
+  arms ::= @[]
   while (not ps_check("RBrace") and not ps_has_err()) {
     push(arms, parse_match_arm())
   }
@@ -1308,7 +1308,7 @@ parse_match_arm := () -> MatchArm {
   first_pat := parse_pat()
   // Or-pattern: collect alternatives separated by | (Pipe token)
   pat := if (ps_check("Pipe")) {
-    pats := @[first_pat]
+    pats ::= @[first_pat]
     while (ps_check("Pipe")) {
       ps_advance()
       push(pats, parse_pat())
@@ -1329,7 +1329,7 @@ parse_match_arm := () -> MatchArm {
 }
 
 parse_more_pats := () -> @[Pat] {
-  pats := @[parse_pat()]
+  pats ::= @[parse_pat()]
   while (ps_check("Comma")) {
     ps_advance()
     push(pats, parse_pat())
@@ -1360,7 +1360,7 @@ parse_pat := () -> Pat {
           ps_advance()
           => Pat.Enum(full, @[])
         }
-        epats := @[parse_pat()]
+        epats ::= @[parse_pat()]
         while (ps_consume("Comma")) {
           if (ps_check("RParen")) { break }
           push(epats, parse_pat())
@@ -1379,7 +1379,7 @@ parse_pat := () -> Pat {
         ps_advance()
         => Pat.Enum(name, @[])
       }
-      epats := @[parse_pat()]
+      epats ::= @[parse_pat()]
       while (ps_consume("Comma")) {
         if (ps_check("RParen")) { break }
         push(epats, parse_pat())
@@ -1439,7 +1439,7 @@ parse_pat := () -> Pat {
       ps_advance()
       => Pat.Tuple(@[])
     }
-    pats := @[parse_pat()]
+    pats ::= @[parse_pat()]
     while (ps_consume("Comma")) {
       if (ps_check("RParen")) {
         break
@@ -1468,7 +1468,7 @@ parse_for_expr := () -> Expr {
   }
   ps_expect("In")
   iter := parse_expr()
-  stmts := parse_block_stmts_braced()
+  stmts ::= parse_block_stmts_braced()
   ss, fe := split_block(stmts)
   mk_expr_for(var_name, iter, ss, Some(fe))
 }
@@ -1478,7 +1478,7 @@ parse_while_expr := () -> Expr {
   ps_expect("LParen")
   cond := parse_expr()
   ps_expect("RParen")
-  stmts := parse_block_stmts_braced()
+  stmts ::= parse_block_stmts_braced()
   ss, fe := split_block(stmts)
   mk_expr_while(cond, ss, Some(fe))
 }
@@ -1489,7 +1489,7 @@ parse_break_expr := () -> Expr {
 }
 
 parse_inline_block := () -> Expr {
-  stmts := parse_block_stmts_braced()
+  stmts ::= parse_block_stmts_braced()
   ss, fe := split_block(stmts)
   Expr.Block(ss, fe)
 }
@@ -1525,7 +1525,7 @@ parse_type_expr := () -> TypeExpr {
   }
   if (k == "LParen") {
     ps_advance()
-    types := @[parse_type_expr()]
+    types ::= @[parse_type_expr()]
     while (ps_consume("Comma")) {
       push(types, parse_type_expr())
     }
@@ -1541,7 +1541,7 @@ parse_type_expr := () -> TypeExpr {
     ps_advance()
     if (ps_check("Lt")) {
       ps_advance()
-      params := @[parse_type_expr()]
+      params ::= @[parse_type_expr()]
       while (ps_consume("Comma")) {
         push(params, parse_type_expr())
       }
@@ -1561,7 +1561,7 @@ parse_generic_lambda := () -> Expr {
   generics := parse_generic_param_list()
   ps_expect("Gt")
   ps_expect("LParen")
-  params := parse_param_list()
+  params ::= parse_param_list()
   ps_expect("RParen")
   if (not ps_check("Arrow")) {
     ps_set_err("expected -> after generic lambda params")
@@ -1580,17 +1580,17 @@ parse_generic_lambda := () -> Expr {
     }
   }
   void_mark := if (rk == "Underscore") { Some(TypeExpr.Void) } else { none }
-  stmts := parse_block_stmts_braced()
+  stmts ::= parse_block_stmts_braced()
   ss, fe := split_block(stmts)
   Expr.Lambda(generics, params, ret_ty, void_mark, ss, fe)
 }
 
 parse_generic_param_list := () -> @[str] {
-  result := @[]
+  result ::= @[]
   name := ps_advance_ident()
   g_str := if (ps_consume("Colon")) {
     first_bound := ps_advance_ident()
-    bounds := @[first_bound]
+    bounds ::= @[first_bound]
     while (ps_check("Plus")) {
       ps_advance()
       push(bounds, ps_advance_ident())
@@ -1605,7 +1605,7 @@ parse_generic_param_list := () -> @[str] {
     name2 := ps_advance_ident()
     g_str2 := if (ps_consume("Colon")) {
       b1 := ps_advance_ident()
-      bounds2 := @[b1]
+      bounds2 ::= @[b1]
       while (ps_check("Plus")) {
         ps_advance()
         push(bounds2, ps_advance_ident())

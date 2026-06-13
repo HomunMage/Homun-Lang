@@ -20,11 +20,11 @@ use main_imp
 
 has_flag := (args: @[str], flag: str) -> bool {
   n := len(args)
-  i := 0
-  found := false
+  i ::= 0
+  found ::= false
   while (i < n) {
-    if (args[i] == flag) { found := true }
-    i := i + 1
+    if (args[i] == flag) { found ::= true }
+    i ::= i + 1
   }
   found
 }
@@ -35,13 +35,13 @@ has_flag := (args: @[str], flag: str) -> bool {
 
 filter_flags := (args: @[str], f1: str, f2: str) -> @[str] {
   n := len(args)
-  result := @[]
-  i := 0
+  result ::= @[]
+  i ::= 0
   while (i < n) {
     if (args[i] != f1 and args[i] != f2) {
       push(result, args[i])
     }
-    i := i + 1
+    i ::= i + 1
   }
   result
 }
@@ -52,14 +52,14 @@ filter_flags := (args: @[str], f1: str, f2: str) -> @[str] {
 
 collect_imports := (args: @[str]) -> @[str] {
   n := len(args)
-  result := @[]
-  i := 0
+  result ::= @[]
+  i ::= 0
   while (i < n) {
     if (args[i] == "--import" and i + 1 < n) {
       push(result, args[i + 1])
-      i := i + 2
+      i ::= i + 2
     } else {
-      i := i + 1
+      i ::= i + 1
     }
   }
   result
@@ -71,14 +71,14 @@ collect_imports := (args: @[str]) -> @[str] {
 
 filter_imports := (args: @[str]) -> @[str] {
   n := len(args)
-  result := @[]
-  i := 0
+  result ::= @[]
+  i ::= 0
   while (i < n) {
     if (args[i] == "--import" and i + 1 < n) {
-      i := i + 2
+      i ::= i + 2
     } else {
       push(result, args[i])
-      i := i + 1
+      i ::= i + 1
     }
   }
   result
@@ -90,7 +90,7 @@ filter_imports := (args: @[str]) -> @[str] {
 
 process_imports := (imports: @[str]) -> _ {
   n := len(imports)
-  i := 0
+  i ::= 0
   while (i < n) {
     src := read_file(imports[i])
     tokens_r := lex(src)
@@ -104,7 +104,7 @@ process_imports := (imports: @[str]) -> _ {
       }
       Err(_) -> {}
     }
-    i := i + 1
+    i ::= i + 1
   }
 }
 
@@ -171,7 +171,7 @@ dedup_use_lines := (src: str) -> str {
 // Compile Homun source text, returning Rust code or an error.
 
 compile_source := (source: str, raw: bool) -> CompileResult {
-  tokens := lex(source)?
+  tokens ::= lex(source)?
   ast := parse(tokens)?
   sema_errs := sema_analyze_skip_undef(ast, @[])
   if (len(sema_errs) > 0) {
@@ -208,7 +208,7 @@ compile_file := (path: str, raw: bool, module: bool) -> CompileResult {
 
 compile_from_stdin := (raw: bool) -> _ {
   src := read_stdin()
-  result := compile_source(src, raw)
+  result ::= compile_source(src, raw)
   out := result_ok_or_exit(result)
   print_str(out)
 }
@@ -218,7 +218,7 @@ compile_from_stdin := (raw: bool) -> _ {
 // Compile a .hom file and print the resulting Rust to stdout.
 
 compile_to_stdout := (path: str, raw: bool, module: bool) -> _ {
-  result := compile_file(path, raw, module)
+  result ::= compile_file(path, raw, module)
   out := result_ok_or_exit(result)
   print_str(out)
 }
@@ -228,7 +228,7 @@ compile_to_stdout := (path: str, raw: bool, module: bool) -> _ {
 // Compile a .hom file and write the resulting Rust to an output file.
 
 compile_to_file := (src: str, out: str, raw: bool, module: bool) -> _ {
-  result := compile_file(src, raw, module)
+  result ::= compile_file(src, raw, module)
   code := result_ok_or_exit(result)
   write_file(out, code)
   print("Compiled ${src} -> ${out}")
@@ -244,10 +244,10 @@ main := () -> _ {
   module := has_flag(args, "--module")
   raw_final := raw or module
   emit_rt := has_flag(args, "--emit-runtime")
-  filtered := filter_flags(args, "--raw", "--module")
-  filtered := filter_flags(filtered, "--emit-runtime", "--emit-runtime")
+  filtered ::= filter_flags(args, "--raw", "--module")
+  filtered ::= filter_flags(filtered, "--emit-runtime", "--emit-runtime")
   imports := collect_imports(filtered)
-  filtered := filter_imports(filtered)
+  filtered ::= filter_imports(filtered)
   n := len(filtered)
   if (emit_rt) {
     emit_runtime_fn()

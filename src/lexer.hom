@@ -12,7 +12,7 @@
 //
 // State-modifying helpers use :: params to mutate LexState in place.
 // The _imp.rs dep functions (ls_advance_col etc.) still use the return-value
-// pattern, so inside :: functions we reassign: state := ls_advance_col(state, 1)
+// pattern, so inside :: functions we reassign: state ::= ls_advance_col(state, 1)
 //
 // Public API:
 //   lex(source: str) -> Result<@[Token], str>
@@ -162,7 +162,7 @@ unescape_char := (c: str) -> str {
 // Skip from current position to (but not including) the next newline.
 ls_skip_line_comment := (state::LexState) -> _ {
   while (ls_not_at_end(state) and ls_cur(state) != "\n") {
-    state := ls_advance_i_only(state, 1)
+    state ::= ls_advance_i_only(state, 1)
   }
 }
 
@@ -172,26 +172,26 @@ ls_skip_block_comment := (state::LexState) -> _ {
   start_line := ls_line(state)
   start_col  := ls_col(state)
   // Skip opening /*
-  state := ls_advance_col(state, 2)
+  state ::= ls_advance_col(state, 2)
 
-  done := false
+  done ::= false
   while (ls_not_at_end(state) and not done) {
     c  := ls_cur(state)
     c1 := ls_peek(state, 1)
     if (c == "*" and c1 == "/") {
-      state := ls_advance_col(state, 2)
-      done := true
+      state ::= ls_advance_col(state, 2)
+      done ::= true
     } else {
       if (is_newline(c)) {
-        state := ls_advance_newline(state)
+        state ::= ls_advance_newline(state)
       } else {
-        state := ls_advance_col(state, 1)
+        state ::= ls_advance_col(state, 1)
       }
     }
   }
 
   if (not done) {
-    state := ls_set_err(state, "Unterminated block comment at line ${start_line}, col ${start_col}")
+    state ::= ls_set_err(state, "Unterminated block comment at line ${start_line}, col ${start_col}")
   }
 }
 
@@ -200,35 +200,35 @@ ls_skip_block_comment := (state::LexState) -> _ {
 // Modifies state in place via ::, returns the string content.
 ls_read_string := (state::LexState) -> str {
   // Skip opening "
-  state := ls_advance_col(state, 1)
-  buf := str_new()
+  state ::= ls_advance_col(state, 1)
+  buf ::= str_new()
 
-  done := false
+  done ::= false
   while (ls_not_at_end(state) and not done) {
     ch := ls_cur(state)
     if (ch == "\"") {
-      state := ls_advance_col(state, 1)
-      done := true
+      state ::= ls_advance_col(state, 1)
+      done ::= true
     } else {
       if (ch == "\\") {
-        state := ls_advance_col(state, 1)
+        state ::= ls_advance_col(state, 1)
         if (not ls_not_at_end(state)) {
-          state := ls_set_err(state, "Unterminated string literal")
-          done := true
+          state ::= ls_set_err(state, "Unterminated string literal")
+          done ::= true
         } else {
           esc := unescape_char(ls_cur(state))
-          buf := str_push(buf, esc)
-          state := ls_advance_col(state, 1)
+          buf ::= str_push(buf, esc)
+          state ::= ls_advance_col(state, 1)
         }
       } else {
-        buf := str_push(buf, ch)
-        state := ls_advance_col(state, 1)
+        buf ::= str_push(buf, ch)
+        state ::= ls_advance_col(state, 1)
       }
     }
   }
 
   if (not done and not ls_has_err(state)) {
-    state := ls_set_err(state, "Unterminated string literal")
+    state ::= ls_set_err(state, "Unterminated string literal")
   }
   buf
 }
@@ -240,39 +240,39 @@ ls_read_char_lit := (state::LexState) -> str {
   start_line := ls_line(state)
   start_col  := ls_col(state)
   // Skip opening '
-  state := ls_advance_col(state, 1)
+  state ::= ls_advance_col(state, 1)
 
   if (not ls_not_at_end(state)) {
-    state := ls_set_err(state, "Unterminated char literal")
+    state ::= ls_set_err(state, "Unterminated char literal")
     str_new()
   } else {
     ch := ls_cur(state)
     if (ch == "\\") {
-      state := ls_advance_col(state, 1)
+      state ::= ls_advance_col(state, 1)
       if (not ls_not_at_end(state)) {
-        state := ls_set_err(state, "Unterminated char literal")
+        state ::= ls_set_err(state, "Unterminated char literal")
         str_new()
       } else {
-        result := unescape_char(ls_cur(state))
-        state := ls_advance_col(state, 1)
+        result ::= unescape_char(ls_cur(state))
+        state ::= ls_advance_col(state, 1)
         // Expect closing '
         if (not ls_not_at_end(state) or ls_cur(state) != "'") {
-          state := ls_set_err(state, "Unterminated char literal at line ${start_line}, col ${start_col}")
+          state ::= ls_set_err(state, "Unterminated char literal at line ${start_line}, col ${start_col}")
           str_new()
         } else {
-          state := ls_advance_col(state, 1)
+          state ::= ls_advance_col(state, 1)
           result
         }
       }
     } else {
-      result := ch
-      state := ls_advance_col(state, 1)
+      result ::= ch
+      state ::= ls_advance_col(state, 1)
       // Expect closing '
       if (not ls_not_at_end(state) or ls_cur(state) != "'") {
-        state := ls_set_err(state, "Unterminated char literal at line ${start_line}, col ${start_col}")
+        state ::= ls_set_err(state, "Unterminated char literal at line ${start_line}, col ${start_col}")
         str_new()
       } else {
-        state := ls_advance_col(state, 1)
+        state ::= ls_advance_col(state, 1)
         result
       }
     }
@@ -287,7 +287,7 @@ ls_read_number := (state::LexState) -> Token {
   start := ls_i(state)
 
   while (ls_not_at_end(state) and (is_digit(ls_cur(state)) or ls_cur(state) == ".")) {
-    state := ls_advance_col(state, 1)
+    state ::= ls_advance_col(state, 1)
   }
 
   raw := ls_substr(state, start, ls_i(state))
@@ -297,7 +297,7 @@ ls_read_number := (state::LexState) -> Token {
     if (ok) {
       Token { kind: TokenKind.Float(val), pos: pos }
     } else {
-      state := ls_set_err(state, "Invalid float")
+      state ::= ls_set_err(state, "Invalid float")
       Token { kind: TokenKind.Eof, pos: pos }
     }
   } else {
@@ -305,7 +305,7 @@ ls_read_number := (state::LexState) -> Token {
     if (ok) {
       Token { kind: TokenKind.Int(val), pos: pos }
     } else {
-      state := ls_set_err(state, "Invalid int")
+      state ::= ls_set_err(state, "Invalid int")
       Token { kind: TokenKind.Eof, pos: pos }
     }
   }
@@ -319,7 +319,7 @@ ls_read_ident := (state::LexState) -> Token {
   start := ls_i(state)
 
   while (ls_not_at_end(state) and is_alnum(ls_cur(state))) {
-    state := ls_advance_col(state, 1)
+    state ::= ls_advance_col(state, 1)
   }
 
   word := ls_substr(state, start, ls_i(state))
@@ -331,8 +331,8 @@ ls_read_ident := (state::LexState) -> Token {
 // Returns Ok(@[Token]) on success or Err(str) on the first lexer error.
 
 lex := (source: str) -> Result<@[Token], str> {
-  state := make_lex_state(source)
-  tokens := @[]
+  state ::= make_lex_state(source)
+  tokens ::= @[]
 
   while (ls_should_continue(state)) {
     c   := ls_cur(state)
@@ -341,9 +341,9 @@ lex := (source: str) -> Result<@[Token], str> {
     // ── Whitespace ──────────────────────────────────────────────────────────
     if (is_whitespace(c)) {
       if (is_newline(c)) {
-        state := ls_advance_newline(state)
+        state ::= ls_advance_newline(state)
       } else {
-        state := ls_advance_col(state, 1)
+        state ::= ls_advance_col(state, 1)
       }
     } else {
 
@@ -391,19 +391,19 @@ lex := (source: str) -> Result<@[Token], str> {
                   multi_kind, multi_n := ls_try_multi_op(state)
                   if (multi_n > 0) {
                     push(tokens, Token { kind: multi_kind, pos: pos })
-                    state  := ls_advance_col(state, multi_n)
+                    state  ::= ls_advance_col(state, multi_n)
                   } else {
 
                     // ── Single-char operators ─────────────────────────────────
                     match ls_try_single_op(c) {
                       Some(k) -> {
                         push(tokens, Token { kind: k, pos: pos })
-                        state  := ls_advance_col(state, 1)
+                        state  ::= ls_advance_col(state, 1)
                       }
                       none -> {
                         err_line := ls_line(state)
                         err_col  := ls_col(state)
-                        state := ls_set_err(state, "Unexpected character '${c}' at line ${err_line}, col ${err_col}")
+                        state ::= ls_set_err(state, "Unexpected character '${c}' at line ${err_line}, col ${err_col}")
                       }
                     }
 

@@ -3,9 +3,9 @@
 
 dfs := (graph: @[@[int]], node: int, visited: @[int]) -> @[int] {
   if (node in visited) { => visited }
-  visited := visited + @[node]
+  visited ::= visited + @[node]
   for neighbor in graph[node] {
-    visited := dfs(graph, neighbor, visited)
+    visited ::= dfs(graph, neighbor, visited)
   }
   visited
 }

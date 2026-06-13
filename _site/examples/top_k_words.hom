@@ -13,43 +13,43 @@ use heap
 
 top_k_words := (words: @[str], k: int) -> @[str] {
   // count frequencies using parallel lists
-  keys := @[]
-  counts := @[]
+  keys ::= @[]
+  counts ::= @[]
   for w in words {
     if (len(w) == 0) { continue }
     if (not re_is_match("^[a-zA-Z]+$", w)) { continue }
-    found := false
-    j := 0
+    found ::= false
+    j ::= 0
     while (j < len(keys)) {
       if (keys[j] == w) {
         counts[j] := counts[j] + 1
-        found := true
+        found ::= true
       }
-      j := j + 1
+      j ::= j + 1
     }
     if (not found) {
-      keys := keys + @[w]
-      counts := counts + @[1]
+      keys ::= keys + @[w]
+      counts ::= counts + @[1]
     }
   }
 
   // push into max-heap (negate for max via min-heap)
-  h := heap_new()
-  i := 0
+  h ::= heap_new()
+  i ::= 0
   while (i < len(keys)) {
     heap_push(h, 0 - counts[i], keys[i])
-    i := i + 1
+    i ::= i + 1
   }
 
   // extract top k
-  result := @[]
-  i := 0
+  result ::= @[]
+  i ::= 0
   while (i < k and not heap_is_empty(h)) {
     match heap_pop(h) {
-      Some((_, word)) -> { result := result + @[word] }
+      Some((_, word)) -> { result ::= result + @[word] }
       none -> {}
     }
-    i := i + 1
+    i ::= i + 1
   }
   result
 }
@@ -57,7 +57,7 @@ top_k_words := (words: @[str], k: int) -> @[str] {
 main := () -> _ {
   text := "the cat sat on the mat the cat ate the rat"
   words := split(text, " ")
-  result := top_k_words(words, 3)
+  result ::= top_k_words(words, 3)
   print("Top 3 words: {:?}", result)
 
   text2 := "hello world hello world hello foo bar foo"

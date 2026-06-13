@@ -80,44 +80,44 @@ register_known_dep_fns := () -> _ {
 
 register_external_types := (stmts: @[Stmt]) -> _ {
   n := len(stmts)
-  j := 0
+  j ::= 0
   while (j < n) {
     match stmts[j] {
       Stmt.EnumDef(ename, variants, _) -> {
         nv := len(variants)
-        vi := 0
+        vi ::= 0
         while (vi < nv) {
           v := variants[vi]
           vfields := v.fields
-          field_tys := @[]
-          fi := 0
+          field_tys ::= @[]
+          fi ::= 0
           nf := len(vfields)
           while (fi < nf) {
             fname_opt, fty := vfields[fi]
             push(field_tys, fty)
-            fi := fi + 1
+            fi ::= fi + 1
           }
           qual := "${ename}.${v.name}"
           register_variant_field_types(qual, field_tys)
-          vi := vi + 1
+          vi ::= vi + 1
         }
       }
       _ -> {}
     }
-    j := j + 1
+    j ::= j + 1
   }
 }
 
 
 register_fn_sig := (name: str, params: @[Param]) -> _ {
-  flags := @[]
-  defaults := @[]
-  pi := 0
+  flags ::= @[]
+  defaults ::= @[]
+  pi ::= 0
   while (pi < len(params)) {
     p := params[pi]
     push(flags, p.mutable)
     push(defaults, p.default)
-    pi := pi + 1
+    pi ::= pi + 1
   }
   fn_mut_params_insert(name, flags)
   fn_defaults_insert(name, defaults)
@@ -125,13 +125,13 @@ register_fn_sig := (name: str, params: @[Param]) -> _ {
 
 set_current_mut_ref_params := (params: @[Param]) -> _ {
   current_mut_ref_params_clear()
-  pi := 0
+  pi ::= 0
   while (pi < len(params)) {
     p := params[pi]
     if (p.mutable) {
       current_mut_ref_params_add(p.name)
     }
-    pi := pi + 1
+    pi ::= pi + 1
   }
 }
 
@@ -140,24 +140,24 @@ fill_default_args := (fn_name: str, args: @[Expr]) -> @[Expr] {
   n_args := len(args)
   n_params := len(defs)
   if (n_args >= n_params) { => args }
-  has_all := true
-  mi := n_args
+  has_all ::= true
+  mi ::= n_args
   while (mi < n_params) {
     match defs[mi] {
-      none -> { has_all := false }
+      none -> { has_all ::= false }
       _ -> {}
     }
-    mi := mi + 1
+    mi ::= mi + 1
   }
   if (not has_all) { => args }
-  result := args
-  fi := n_args
+  result ::= args
+  fi ::= n_args
   while (fi < n_params) {
     match defs[fi] {
       Some(default_expr) -> { push(result, default_expr) }
       none -> {}
     }
-    fi := fi + 1
+    fi ::= fi + 1
   }
   result
 }
@@ -265,20 +265,20 @@ codegen_type := (ty: TypeExpr) -> str {
     TypeExpr.Set(inner) -> "std::collections::HashSet<" + codegen_type(inner) + ">"
     TypeExpr.Option(inner) -> "Option<" + codegen_type(inner) + ">"
     TypeExpr.Tuple(ts) -> {
-      parts := @[]
-      ti := 0
+      parts ::= @[]
+      ti ::= 0
       while (ti < len(ts)) {
         push(parts, codegen_type(ts[ti]))
-        ti := ti + 1
+        ti ::= ti + 1
       }
       "(" + join(parts, ", ") + ")"
     }
     TypeExpr.Generic(gn, gps) -> {
-      parts := @[]
-      gi := 0
+      parts ::= @[]
+      gi ::= 0
       while (gi < len(gps)) {
         push(parts, codegen_type(gps[gi]))
-        gi := gi + 1
+        gi ::= gi + 1
       }
       gn + "<" + join(parts, ", ") + ">"
     }
@@ -312,11 +312,11 @@ codegen_type_variant_field := (ty: TypeExpr) -> str {
       }
     }
     TypeExpr.Tuple(ts) -> {
-      parts := @[]
-      ti := 0
+      parts ::= @[]
+      ti ::= 0
       while (ti < len(ts)) {
         push(parts, codegen_type_variant_field(ts[ti]))
-        ti := ti + 1
+        ti ::= ti + 1
       }
       "(" + join(parts, ", ") + ")"
     }
@@ -347,7 +347,7 @@ codegen_param := (p: Param) -> str {
 codegen_params_mut := (params: @[Param]) -> str {
   gen_names := @["T", "U", "V", "W", "X", "Y", "Z"]
   gen_idx ::= 0
-  parts := @[]
+  parts ::= @[]
   pi ::= 0
   pn := len(params)
   while (pi < pn) {
@@ -390,7 +390,7 @@ codegen_params_mut := (params: @[Param]) -> str {
 infer_generics := (params: @[Param]) -> @[str] {
   gen_names := @["T", "U", "V", "W", "X", "Y", "Z"]
   n ::= 0
-  pi := 0
+  pi ::= 0
   while (pi < len(params)) {
     p := params[pi]
     if (p.name != "_") {
@@ -399,13 +399,13 @@ infer_generics := (params: @[Param]) -> @[str] {
         _ -> {}
       }
     }
-    pi := pi + 1
+    pi ::= pi + 1
   }
-  result := @[]
-  gi := 0
+  result ::= @[]
+  gi ::= 0
   while (gi < n) {
     push(result, str(gen_names[gi]) + ": Clone")
-    gi := gi + 1
+    gi ::= gi + 1
   }
   result
 }
@@ -419,11 +419,11 @@ pat_names_list := (pat: Pat) -> @[str] {
     Pat.Var(name) -> @[name]
     Pat.Tuple(pats) -> {
       n := len(pats)
-      names := @[]
-      i := 0
+      names ::= @[]
+      i ::= 0
       while (i < n) {
-        names := vec_extend(names, pat_names_list(pats[i]))
-        i := i + 1
+        names ::= vec_extend(names, pat_names_list(pats[i]))
+        i ::= i + 1
       }
       names
     }
@@ -451,11 +451,11 @@ cg_clone_arg := (i: int, sc: Scope, e: Expr) -> str {
 
 cg_commas := (i: int, sc: Scope, items: @[Expr]) -> str {
   n := len(items)
-  parts := @[]
-  k := 0
+  parts ::= @[]
+  k ::= 0
   while (k < n) {
     push(parts, cg_expr(i, sc, items[k]))
-    k := k + 1
+    k ::= k + 1
   }
   join(parts, ", ")
 }
@@ -484,11 +484,11 @@ cg_pat := (p: Pat) -> str {
     Pat.Lit(e) -> cg_expr(0, scope_new(), e)
     Pat.Tuple(pats) -> {
       n := len(pats)
-      parts := @[]
-      i := 0
+      parts ::= @[]
+      i ::= 0
       while (i < n) {
         push(parts, cg_pat(pats[i]))
-        i := i + 1
+        i ::= i + 1
       }
       "(" + join(parts, ", ") + ")"
     }
@@ -501,11 +501,11 @@ cg_pat := (p: Pat) -> str {
         if (n == 1) {
           name2 + "(" + cg_pat(epats[0]) + ")"
         } else {
-          parts := @[]
-          pi := 0
+          parts ::= @[]
+          pi ::= 0
           while (pi < n) {
             push(parts, cg_pat(epats[pi]))
-            pi := pi + 1
+            pi ::= pi + 1
           }
           name2 + "(" + join(parts, ", ") + ")"
         }
@@ -513,11 +513,11 @@ cg_pat := (p: Pat) -> str {
     }
     Pat.Or(or_pats) -> {
       n := len(or_pats)
-      parts := @[]
-      i := 0
+      parts ::= @[]
+      i ::= 0
       while (i < n) {
         push(parts, cg_pat(or_pats[i]))
-        i := i + 1
+        i ::= i + 1
       }
       join(parts, " | ")
     }
@@ -569,12 +569,12 @@ walk_pat_box_names := (pat: Pat, ty: TypeExpr, enum_name: str) -> @[str] {
           np := len(pats)
           nt := len(tys)
           n := if (np < nt) { np } else { nt }
-          result := @[]
-          i := 0
+          result ::= @[]
+          i ::= 0
           while (i < n) {
-            names := walk_pat_box_names(pats[i], tys[i], enum_name)
-            result := vec_extend(result, names)
-            i := i + 1
+            names ::= walk_pat_box_names(pats[i], tys[i], enum_name)
+            result ::= vec_extend(result, names)
+            i ::= i + 1
           }
           result
         }
@@ -596,16 +596,16 @@ pat_box_var_names := (pat: Pat) -> @[str] {
           @[]
         } else {
           enum_name := substr(qual_name, 0, dot)
-          fields := variant_field_types_get(qual_name)
+          fields ::= variant_field_types_get(qual_name)
           nf := len(fields)
           np := len(sub_pats)
           n := if (np < nf) { np } else { nf }
-          result := @[]
-          i := 0
+          result ::= @[]
+          i ::= 0
           while (i < n) {
-            names := walk_pat_box_names(sub_pats[i], fields[i], enum_name)
-            result := vec_extend(result, names)
-            i := i + 1
+            names ::= walk_pat_box_names(sub_pats[i], fields[i], enum_name)
+            result ::= vec_extend(result, names)
+            i ::= i + 1
           }
           result
         }
@@ -680,17 +680,17 @@ cg_general_call := (i: int, sc: Scope, f: Expr, args: @[Expr]) -> str {
   // variant constructor detection (for Box auto-wrap)
   qual := detect_variant_qual(f)
   has_box_info := qual != "" and variant_field_types_known(qual)
-  field_tys := if (has_box_info) { variant_field_types_get(qual) } else { @[] }
+  field_tys ::= if (has_box_info) { variant_field_types_get(qual) } else { @[] }
   enum_name := if (has_box_info) {
     dot := find(qual, ".")
     substr(qual, 0, dot)
   } else { "" }
   nft := len(field_tys)
   n := len(filled_args)
-  arg_strs := @[]
-  ai := 0
+  arg_strs ::= @[]
+  ai ::= 0
   while (ai < n) {
-    arg_s := if (fn_name != "" and is_param_mutable_in_call(fn_name, ai)) {
+    arg_s ::= if (fn_name != "" and is_param_mutable_in_call(fn_name, ai)) {
       match filled_args[ai] {
         Expr.Var(vn) -> {
           if (is_mut_ref_param(vn)) { vn } else { "&mut " + vn }
@@ -700,13 +700,13 @@ cg_general_call := (i: int, sc: Scope, f: Expr, args: @[Expr]) -> str {
     } else {
       cg_clone_arg(i, sc, filled_args[ai])
     }
-    arg_s := if (has_box_info and ai < nft) {
+    arg_s ::= if (has_box_info and ai < nft) {
       maybe_box_wrap(arg_s, field_tys[ai], enum_name)
     } else {
       arg_s
     }
     push(arg_strs, arg_s)
-    ai := ai + 1
+    ai ::= ai + 1
   }
   cg_expr(i, sc, f) + "(" + join(arg_strs, ", ") + ")"
 }
@@ -798,11 +798,11 @@ cg_print := (i: int, sc: Scope, args: @[Expr]) -> str {
       _ -> "println!(\"{}\", " + cg_expr(i, sc, args[0]) + ")"
     }
   } else {
-    parts := @[]
-    ai := 0
+    parts ::= @[]
+    ai ::= 0
     while (ai < n) {
       push(parts, cg_expr(i, sc, args[ai]))
-      ai := ai + 1
+      ai ::= ai + 1
     }
     "println!(" + join(parts, ", ") + ")"
   }
@@ -818,11 +818,11 @@ pat_has_str_lit := (p: Pat) -> bool {
     Pat.Lit(_) -> false
     Pat.Or(or_pats) -> {
       n := len(or_pats)
-      found := false
-      i := 0
+      found ::= false
+      i ::= 0
       while (i < n) {
-        if (pat_has_str_lit(or_pats[i])) { found := true }
-        i := i + 1
+        if (pat_has_str_lit(or_pats[i])) { found ::= true }
+        i ::= i + 1
       }
       found
     }
@@ -836,13 +836,13 @@ pat_has_str_lit := (p: Pat) -> bool {
 
 has_str_pat_in_arms := (arms: @[MatchArm]) -> bool {
   n := len(arms)
-  i := 0
-  found := false
+  i ::= 0
+  found ::= false
   while (i < n) {
     if (pat_has_str_lit(arms[i].pat)) {
-      found := true
+      found ::= true
     }
-    i := i + 1
+    i ::= i + 1
   }
   found
 }
@@ -865,7 +865,7 @@ cg_arm := (i: int, sc: Scope, arm: MatchArm) -> str {
   if (len(box_vars) == 0) {
     "${ind(i + 1)}${pat_s}${guard_s} => ${body_s},"
   } else {
-    rebinds := @[]
+    rebinds ::= @[]
     for nm in box_vars {
       push(rebinds, "let " + nm + " = *" + nm + ";")
     }
@@ -884,20 +884,20 @@ cg_expr := (i: int, sc: Scope, expr: Expr) -> str {
   match e_dispatch {
     Expr.Lambda(_, params, _, _, lam_stmts, fe) -> {
       pn := len(params)
-      param_parts := @[]
-      pi := 0
+      param_parts ::= @[]
+      pi ::= 0
       while (pi < pn) {
         push(param_parts, codegen_param(params[pi]))
-        pi := pi + 1
+        pi ::= pi + 1
       }
       param_str := join(param_parts, ", ")
-      inner_sc := scope_clone(sc)
-      pi2 := 0
+      inner_sc ::= scope_clone(sc)
+      pi2 ::= 0
       while (pi2 < pn) {
-        inner_sc := scope_insert(inner_sc, params[pi2].name)
-        pi2 := pi2 + 1
+        inner_sc ::= scope_insert(inner_sc, params[pi2].name)
+        pi2 ::= pi2 + 1
       }
-      body_lines := cg_body(i + 1, inner_sc, lam_stmts, fe)
+      body_lines ::= cg_body(i + 1, inner_sc, lam_stmts, fe)
       "|" + param_str + "| {\n" + join(body_lines, "\n") + "\n" + ind(i) + "}"
     }
     Expr.Int(n) -> str(n)
@@ -959,12 +959,12 @@ cg_expr := (i: int, sc: Scope, expr: Expr) -> str {
     Expr.List(items) -> "vec![" + cg_commas(i, sc, items) + "]"
     Expr.Dict(pairs) -> {
       n := len(pairs)
-      parts := @[]
-      pi := 0
+      parts ::= @[]
+      pi ::= 0
       while (pi < n) {
         pk, pv := pairs[pi]
         push(parts, cg_expr(i, sc, pk) + " => " + cg_expr(i, sc, pv))
-        pi := pi + 1
+        pi ::= pi + 1
       }
       "dict![" + join(parts, ", ") + "]"
     }
@@ -972,22 +972,22 @@ cg_expr := (i: int, sc: Scope, expr: Expr) -> str {
     Expr.Tuple(items) -> "(" + cg_commas(i, sc, items) + ")"
     Expr.Struct(name_opt, fields) -> {
       n := len(fields)
-      parts := @[]
-      fi := 0
+      parts ::= @[]
+      fi ::= 0
       while (fi < n) {
         fname, fval := fields[fi]
         push(parts, fname + ": " + cg_struct_val(i, sc, fval))
-        fi := fi + 1
+        fi ::= fi + 1
       }
       match name_opt {
         Some(name) -> name + " { " + join(parts, ", ") + " }"
         none -> {
-          val_parts := @[]
-          vi := 0
+          val_parts ::= @[]
+          vi ::= 0
           while (vi < n) {
             vname, vval := fields[vi]
             push(val_parts, cg_expr(i, sc, vval))
-            vi := vi + 1
+            vi ::= vi + 1
           }
           "(" + join(val_parts, ", ") + ")"
         }
@@ -1016,22 +1016,22 @@ cg_expr := (i: int, sc: Scope, expr: Expr) -> str {
                 }
               } else {
                 lhs_s := cg_expr(i, sc, lhs)
-                all_args := @[lhs_s]
-                ai := 0
+                all_args ::= @[lhs_s]
+                ai ::= 0
                 while (ai < len(args)) {
-                  all_args := all_args + @[cg_expr(i, sc, args[ai])]
-                  ai := ai + 1
+                  all_args ::= all_args + @[cg_expr(i, sc, args[ai])]
+                  ai ::= ai + 1
                 }
                 fn_name + "(" + join(all_args, ", ") + ")"
               }
             }
             _ -> {
               lhs_s := cg_expr(i, sc, lhs)
-              all_args := @[lhs_s]
-              ai := 0
+              all_args ::= @[lhs_s]
+              ai ::= 0
               while (ai < len(args)) {
-                all_args := all_args + @[cg_expr(i, sc, args[ai])]
-                ai := ai + 1
+                all_args ::= all_args + @[cg_expr(i, sc, args[ai])]
+                ai ::= ai + 1
               }
               cg_expr(i, sc, f) + "(" + join(all_args, ", ") + ")"
             }
@@ -1081,11 +1081,11 @@ cg_expr := (i: int, sc: Scope, expr: Expr) -> str {
     }
     Expr.Match(scrut, arms) -> {
       n := len(arms)
-      arm_strs := @[]
-      ai := 0
+      arm_strs ::= @[]
+      ai ::= 0
       while (ai < n) {
         push(arm_strs, cg_arm(i, sc, arms[ai]))
-        ai := ai + 1
+        ai ::= ai + 1
       }
       scrut_s := if (has_str_pat_in_arms(arms)) {
         cg_expr(i, sc, scrut) + ".as_str()"
@@ -1095,15 +1095,15 @@ cg_expr := (i: int, sc: Scope, expr: Expr) -> str {
       "match " + scrut_s + " {\n" + join(arm_strs, "\n") + "\n" + ind(i) + "}"
     }
     Expr.Block(stmts, fe) -> {
-      body_lines := cg_body(i + 1, sc, stmts, fe)
+      body_lines ::= cg_body(i + 1, sc, stmts, fe)
       "{\n" + join(body_lines, "\n") + "\n" + ind(i) + "}"
     }
     Expr.For(var, iter, body_stmts, _) -> {
       fe_opt := expr_for_final(expr)
-      sc0 := scope_clone(sc)
-      sc0 := scope_insert(sc0, var)
-      body_sc := scope_clone(sc0)
-      body_lines, body_sc2 := cg_stmts(i + 1, body_sc, body_stmts)
+      sc0 ::= scope_clone(sc)
+      sc0 ::= scope_insert(sc0, var)
+      body_sc ::= scope_clone(sc0)
+      body_lines, body_sc2 ::= cg_stmts(i + 1, body_sc, body_stmts)
       match fe_opt {
         none -> {}
         Some(fe) -> {
@@ -1125,8 +1125,8 @@ cg_expr := (i: int, sc: Scope, expr: Expr) -> str {
     }
     Expr.While(cond, body_stmts, _) -> {
       fe_opt := expr_while_final(expr)
-      body_sc := scope_clone(sc)
-      body_lines, body_sc2 := cg_stmts(i + 1, body_sc, body_stmts)
+      body_sc ::= scope_clone(sc)
+      body_lines, body_sc2 ::= cg_stmts(i + 1, body_sc, body_stmts)
       match fe_opt {
         none -> {}
         Some(fe) -> {
@@ -1182,8 +1182,8 @@ cg_expr := (i: int, sc: Scope, expr: Expr) -> str {
 
 cg_stmts := (i: int, sc: Scope, stmts: @[Stmt]) -> (@[str], Scope) {
   n := len(stmts)
-  lines := @[]
-  idx := 0
+  lines ::= @[]
+  idx ::= 0
   while (idx < n) {
     s := stmts[idx]
     line := cg_stmt(i, sc, s)
@@ -1193,19 +1193,19 @@ cg_stmts := (i: int, sc: Scope, stmts: @[Stmt]) -> (@[str], Scope) {
         | Stmt.BindMut(name, _, _)
         | Stmt.StructDef(name, _, _)
         | Stmt.EnumDef(name, _, _) -> {
-        sc := scope_insert(sc, name)
+        sc ::= scope_insert(sc, name)
       }
       Stmt.BindPat(pat, _) | Stmt.BindPatMut(pat, _) -> {
-        names := pat_names_list(pat)
-        ni := 0
+        names ::= pat_names_list(pat)
+        ni ::= 0
         while (ni < len(names)) {
-          sc := scope_insert(sc, names[ni])
-          ni := ni + 1
+          sc ::= scope_insert(sc, names[ni])
+          ni ::= ni + 1
         }
       }
       _ -> {}
     }
-    idx := idx + 1
+    idx ::= idx + 1
   }
   (lines, sc)
 }
@@ -1215,8 +1215,8 @@ cg_stmts := (i: int, sc: Scope, stmts: @[Stmt]) -> (@[str], Scope) {
 // Emit body lines (stmts + final expr).  Uses an independent scope copy.
 
 cg_body := (i: int, sc: Scope, stmts: @[Stmt], fe: Expr) -> @[str] {
-  body_sc := scope_clone(sc)
-  lines, body_sc := cg_stmts(i, body_sc, stmts)
+  body_sc ::= scope_clone(sc)
+  lines, body_sc ::= cg_stmts(i, body_sc, stmts)
   fe_s := cg_struct_val(i, body_sc, fe)
   fe_line := "${ind(i)}${fe_s}"
   push(lines, fe_line)
@@ -1227,23 +1227,23 @@ cg_body := (i: int, sc: Scope, stmts: @[Stmt], fe: Expr) -> @[str] {
 // ─── cg_bind_common ───────────────────────────────────────────────────────────
 // Shared body for Stmt.Bind / Stmt.BindMut inside a function body.
 
-cg_bind_common := (i: int, sc: Scope, name: str, e: Expr) -> str {
+cg_bind_common := (i: int, sc: Scope, name: str, e: Expr, mutable: bool) -> str {
   if (is_thread_local_var(name)) {
     => "${ind(i)}${name}_set(${cg_struct_val(i, sc, e)});"
   }
   e_lam := e
   match e_lam {
     Expr.Lambda(_, params, _, _, lam_stmts, fe2) -> {
-      param_parts := @[]
+      param_parts ::= @[]
       for pk in range(len(params)) {
         push(param_parts, codegen_param(params[pk]))
       }
       param_str := join(param_parts, ", ")
-      inner_sc := scope_clone(sc)
+      inner_sc ::= scope_clone(sc)
       for pi in range(len(params)) {
-        inner_sc := scope_insert(inner_sc, params[pi].name)
+        inner_sc ::= scope_insert(inner_sc, params[pi].name)
       }
-      body_lines := cg_body(i + 1, inner_sc, lam_stmts, fe2)
+      body_lines ::= cg_body(i + 1, inner_sc, lam_stmts, fe2)
       => ind(i) + "let " + name + " = |" + param_str + "| {\n" + join(body_lines, "\n") + "\n" + ind(i) + "};"
     }
     _ -> {}
@@ -1259,7 +1259,8 @@ cg_bind_common := (i: int, sc: Scope, name: str, e: Expr) -> str {
     if (scope_contains(sc, name)) {
       if (is_mut_ref_param(name)) { "${ind(i)}*${name} = ${rhs};" } else { "${ind(i)}${name} = ${rhs};" }
     } else {
-      ind(i) + "let mut " + name + " = " + rhs + ";"
+      if (mutable) { ind(i) + "let mut " + name + " = " + rhs + ";" }
+      else { ind(i) + "let " + name + " = " + rhs + ";" }
     }
   }
 }
@@ -1271,52 +1272,52 @@ cg_bind_common := (i: int, sc: Scope, name: str, e: Expr) -> str {
 cg_stmt := (i: int, sc: Scope, stmt: Stmt) -> str {
   match stmt {
     Stmt.Bind(name, e, _) -> {
-      cg_bind_common(i, sc, name, e)
+      cg_bind_common(i, sc, name, e, false)
     }
     Stmt.BindMut(name, e, _) -> {
-      cg_bind_common(i, sc, name, e)
+      cg_bind_common(i, sc, name, e, true)
     }
     Stmt.BindPat(pat, e) -> {
       rhs := cg_expr(i, sc, e)
-      names := pat_names_list(pat)
+      names ::= pat_names_list(pat)
       // Check if ALL variable names are already in scope
-      all_exist := true
-      ci := 0
+      all_exist ::= true
+      ci ::= 0
       while (ci < len(names)) {
         if (not scope_contains(sc, names[ci])) {
-          all_exist := false
+          all_exist ::= false
         }
-        ci := ci + 1
+        ci ::= ci + 1
       }
       if (all_exist and len(names) > 0) {
         // Reassignment: (a, b) = rhs;
-        reassign_parts := @[]
-        ri := 0
+        reassign_parts ::= @[]
+        ri ::= 0
         while (ri < len(names)) {
           push(reassign_parts, names[ri])
-          ri := ri + 1
+          ri ::= ri + 1
         }
         ind(i) + "(" + join(reassign_parts, ", ") + ") = " + rhs + ";"
       } else {
-        // New binding: let (mut a, mut b) = rhs;
+        // New immutable binding: let (a, b) = rhs;
         bind_str := match pat {
           Pat.Tuple(sub_pats) -> {
             sn := len(sub_pats)
-            parts := @[]
-            si := 0
+            parts ::= @[]
+            si ::= 0
             while (si < sn) {
               sp := sub_pats[si]
               part := match sp {
-                Pat.Var(vname) -> "mut " + vname
+                Pat.Var(vname) -> vname
                 Pat.Wild -> "_"
                 _ -> cg_pat(sp)
               }
               push(parts, part)
-              si := si + 1
+              si ::= si + 1
             }
             join(parts, ", ")
           }
-          Pat.Var(vname) -> "mut " + vname
+          Pat.Var(vname) -> vname
           _ -> cg_pat(pat)
         }
         ind(i) + "let (" + bind_str + ") = " + rhs + ";"
@@ -1324,29 +1325,29 @@ cg_stmt := (i: int, sc: Scope, stmt: Stmt) -> str {
     }
     Stmt.BindPatMut(pat, e) -> {
       rhs := cg_expr(i, sc, e)
-      names := pat_names_list(pat)
-      all_exist := true
-      ci := 0
+      names ::= pat_names_list(pat)
+      all_exist ::= true
+      ci ::= 0
       while (ci < len(names)) {
         if (not scope_contains(sc, names[ci])) {
-          all_exist := false
+          all_exist ::= false
         }
-        ci := ci + 1
+        ci ::= ci + 1
       }
       if (all_exist and len(names) > 0) {
-        reassign_parts := @[]
-        ri := 0
+        reassign_parts ::= @[]
+        ri ::= 0
         while (ri < len(names)) {
           push(reassign_parts, names[ri])
-          ri := ri + 1
+          ri ::= ri + 1
         }
         ind(i) + "(" + join(reassign_parts, ", ") + ") = " + rhs + ";"
       } else {
         bind_str := match pat {
           Pat.Tuple(sub_pats) -> {
             sn := len(sub_pats)
-            parts := @[]
-            si := 0
+            parts ::= @[]
+            si ::= 0
             while (si < sn) {
               sp := sub_pats[si]
               part := match sp {
@@ -1355,7 +1356,7 @@ cg_stmt := (i: int, sc: Scope, stmt: Stmt) -> str {
                 _ -> cg_pat(sp)
               }
               push(parts, part)
-              si := si + 1
+              si ::= si + 1
             }
             join(parts, ", ")
           }
@@ -1377,8 +1378,8 @@ cg_stmt := (i: int, sc: Scope, stmt: Stmt) -> str {
     }
     Stmt.StructDef(name, fields, _) -> {
       n := len(fields)
-      field_lines := @[]
-      fi := 0
+      field_lines ::= @[]
+      fi ::= 0
       while (fi < n) {
         f := fields[fi]
         ty_str := match f.ty {
@@ -1386,18 +1387,18 @@ cg_stmt := (i: int, sc: Scope, stmt: Stmt) -> str {
           Some(t) -> codegen_type(t)
         }
         push(field_lines, ind(i + 1) + "pub " + f.name + ": " + ty_str + ",")
-        fi := fi + 1
+        fi ::= fi + 1
       }
       ind(i) + "#[derive(Debug, Clone, PartialEq)]\n" + ind(i) + "struct " + name + " {\n" + join(field_lines, "\n") + "\n" + ind(i) + "}"
     }
     Stmt.EnumDef(name, variants, _) -> {
       register_recursive_type(name)
       n := len(variants)
-      var_lines := @[]
-      vi := 0
+      var_lines ::= @[]
+      vi ::= 0
       while (vi < n) {
         push(var_lines, cg_variant_line(i + 1, variants[vi]))
-        vi := vi + 1
+        vi ::= vi + 1
       }
       clear_recursive_types()
       ind(i) + "#[derive(Debug, Clone, PartialEq)]\n" + ind(i) + "enum " + name + " {\n" + join(var_lines, "\n") + "\n" + ind(i) + "}"
@@ -1432,7 +1433,7 @@ tl_infer_type := (e: Expr) -> str {
 // Emit #[attr] lines for a list of attribute bodies. Empty list emits nothing.
 
 emit_attrs := (attrs: @[str]) -> str {
-  parts := @[]
+  parts ::= @[]
   for a in attrs {
     push(parts, "#[" + a + "]")
   }
@@ -1454,19 +1455,19 @@ cg_variant_line := (i: int, v: VariantDef) -> str {
   if (nf == 0) {
     "${ind(i)}${vname},"
   } else {
-    any_named := false
-    fi_check := 0
+    any_named ::= false
+    fi_check ::= 0
     while (fi_check < nf) {
       fopt_check, _ := vfields[fi_check]
       match fopt_check {
-        Some(_) -> { any_named := true }
+        Some(_) -> { any_named ::= true }
         none -> {}
       }
-      fi_check := fi_check + 1
+      fi_check ::= fi_check + 1
     }
     if (any_named) {
-      parts := @[]
-      fi := 0
+      parts ::= @[]
+      fi ::= 0
       while (fi < nf) {
         field_opt, fty := vfields[fi]
         part := match field_opt {
@@ -1474,17 +1475,17 @@ cg_variant_line := (i: int, v: VariantDef) -> str {
           none -> "_: " + codegen_type_variant_field(fty)
         }
         push(parts, part)
-        fi := fi + 1
+        fi ::= fi + 1
       }
       // Use concatenation to avoid literal { and } inside a format! string
       "${ind(i)}${vname}" + " { " + join(parts, ", ") + " },"
     } else {
-      type_parts := @[]
-      fi := 0
+      type_parts ::= @[]
+      fi ::= 0
       while (fi < nf) {
         skip, fty := vfields[fi]
         push(type_parts, codegen_type_variant_field(fty))
-        fi := fi + 1
+        fi ::= fi + 1
       }
       "${ind(i)}${vname}(" + join(type_parts, ", ") + "),"
     }
@@ -1497,11 +1498,11 @@ cg_variant_line := (i: int, v: VariantDef) -> str {
 
 cg_top_fn := (i: int, name: str, explicit_gen: @[str], params: @[Param], ret_ty: Option<TypeExpr>, void_mark: Option<TypeExpr>, stmts: @[Stmt], fe: Expr) -> str {
   pn := len(params)
-  param_names := @[]
-  pk := 0
+  param_names ::= @[]
+  pk ::= 0
   while (pk < pn) {
     push(param_names, params[pk].name)
-    pk := pk + 1
+    pk ::= pk + 1
   }
   scope0 := scope_from_list(param_names)
   param_str := codegen_params_mut(params)
@@ -1518,9 +1519,9 @@ cg_top_fn := (i: int, name: str, explicit_gen: @[str], params: @[Param], ret_ty:
       }
     }
   }
-  body_lines := cg_body(i + 1, scope0, stmts, fe)
+  body_lines ::= cg_body(i + 1, scope0, stmts, fe)
   sig := "pub fn " + name + gen_str + "(" + param_str + ")" + ret_str + " {"
-  all_lines := @[sig] + body_lines
+  all_lines ::= @[sig] + body_lines
   push(all_lines, "}")
   join(all_lines, "\n")
 }
@@ -1579,8 +1580,8 @@ codegen_top_level_stmt := (i: int, stmt: Stmt, rs_content: RsContent) -> str {
     }
     Stmt.StructDef(name, fields, attrs) -> {
       n := len(fields)
-      field_lines := @[]
-      fi := 0
+      field_lines ::= @[]
+      fi ::= 0
       while (fi < n) {
         f := fields[fi]
         ty_str := match f.ty {
@@ -1588,12 +1589,12 @@ codegen_top_level_stmt := (i: int, stmt: Stmt, rs_content: RsContent) -> str {
           Some(t) -> codegen_type(t)
         }
         push(field_lines, ind(i + 1) + "pub " + f.name + ": " + ty_str + ",")
-        fi := fi + 1
+        fi ::= fi + 1
       }
       attrs_str := emit_attrs(attrs)
-      has_derive := false
+      has_derive ::= false
       for a in attrs {
-        if (contains(a, "derive(")) { has_derive := true }
+        if (contains(a, "derive(")) { has_derive ::= true }
       }
       body := name + " {\n" + join(field_lines, "\n") + "\n}"
       if (has_derive) {
@@ -1605,17 +1606,17 @@ codegen_top_level_stmt := (i: int, stmt: Stmt, rs_content: RsContent) -> str {
     Stmt.EnumDef(name, variants, attrs) -> {
       register_recursive_type(name)
       n := len(variants)
-      var_lines := @[]
-      vi := 0
+      var_lines ::= @[]
+      vi ::= 0
       while (vi < n) {
         push(var_lines, cg_variant_line(i + 1, variants[vi]))
-        vi := vi + 1
+        vi ::= vi + 1
       }
       clear_recursive_types()
       attrs_str := emit_attrs(attrs)
-      has_derive := false
+      has_derive ::= false
       for a in attrs {
-        if (contains(a, "derive(")) { has_derive := true }
+        if (contains(a, "derive(")) { has_derive ::= true }
       }
       body := name + " {\n" + join(var_lines, "\n") + "\n}"
       if (has_derive) {
@@ -1639,7 +1640,7 @@ codegen_top_level_stmt := (i: int, stmt: Stmt, rs_content: RsContent) -> str {
       ty_str := tl_infer_type(tl_e)
       init_str := cg_struct_val(0, scope_new(), tl_e)
       register_thread_local_var(tl_name)
-      tl_lines := @[]
+      tl_lines ::= @[]
       push(tl_lines, "thread_local! {")
       push(tl_lines, "    static " + upper + ": std::cell::RefCell<" + ty_str + "> = std::cell::RefCell::new(" + init_str + ");")
       push(tl_lines, "}")
@@ -1664,35 +1665,35 @@ codegen_program_with_resolved := (prog: @[Stmt], hom_files: HomFiles, rs_content
   // additive across files so that when this codegen pass runs for a file that
   // imports an enum via `use`, the dependency's variants (registered when its
   // own earlier DFS-ordered codegen pass ran) are still visible.
-  jj := 0
+  jj ::= 0
   while (jj < n) {
     match prog[jj] {
       Stmt.EnumDef(ename, variants, _) -> {
         nv := len(variants)
-        vi := 0
+        vi ::= 0
         while (vi < nv) {
           v := variants[vi]
           vfields := v.fields
-          field_tys := @[]
-          fi := 0
+          field_tys ::= @[]
+          fi ::= 0
           nf := len(vfields)
           while (fi < nf) {
             fname_opt, fty := vfields[fi]
             push(field_tys, fty)
-            fi := fi + 1
+            fi ::= fi + 1
           }
           qual := "${ename}.${v.name}"
           register_variant_field_types(qual, field_tys)
-          vi := vi + 1
+          vi ::= vi + 1
         }
       }
       _ -> {}
     }
-    jj := jj + 1
+    jj ::= jj + 1
   }
   // Pass 1: collect InnerAttr stmts and emit as #![..] at top
-  inner_lines := @[]
-  j := 0
+  inner_lines ::= @[]
+  j ::= 0
   while (j < n) {
     s := prog[j]
     match s {
@@ -1701,7 +1702,7 @@ codegen_program_with_resolved := (prog: @[Stmt], hom_files: HomFiles, rs_content
       }
       _ -> {}
     }
-    j := j + 1
+    j ::= j + 1
   }
   header := if (len(inner_lines) == 0) {
     ""
@@ -1709,8 +1710,8 @@ codegen_program_with_resolved := (prog: @[Stmt], hom_files: HomFiles, rs_content
     join(inner_lines, "\n") + "\n"
   }
   // Pass 2: emit non-InnerAttr statements
-  i := 0
-  parts := @[]
+  i ::= 0
+  parts ::= @[]
   while (i < n) {
     s := prog[i]
     skip := match s {
@@ -1721,7 +1722,7 @@ codegen_program_with_resolved := (prog: @[Stmt], hom_files: HomFiles, rs_content
     if (not skip) {
       push(parts, codegen_top_level_stmt(0, prog[i], rs_content))
     }
-    i := i + 1
+    i ::= i + 1
   }
   body := join(parts, "\n")
   "${header}${body}"

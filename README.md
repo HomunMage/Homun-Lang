@@ -128,10 +128,13 @@ x      := 10              // immutable (Rust: let)
 name   := "hero"
 speed  := float(3.14)
 hp     := int(100)         // explicit type via constructor
+// x := 20                 // ❌ compile error: ':=' cannot reassign an immutable binding
 
 // Mutable variables — ::= emits let mut, allows reassignment
 counter ::= 0
 counter ::= counter + 1    // reassignment (Rust: counter = counter + 1)
+// A value mutated in place (push, heap_push, set_add, field/index assign…)
+// also needs ::= — it is being changed.
 
 // String interpolation — any expression inside ${}
 greeting := "Hello, ${name}! HP: ${hp * 2}"
@@ -158,8 +161,8 @@ No bare `=` exists. `:=` and `::=` bind, `==` compares. No ambiguity.
 
 | Operator | Meaning |
 |---|---|
-| `:=` | Bind / rebind (immutable — Rust `let`) |
-| `::=` | Bind / rebind (mutable — Rust `let mut`) |
+| `:=` | Bind (immutable — Rust `let`). **Cannot reassign** an existing binding — use `::=` or a new name. |
+| `::=` | Bind / reassign (mutable — Rust `let mut`) |
 | `==`, `!=`, `<`, `>`, `<=`, `>=` | Comparison |
 | `and`, `or`, `not` | Boolean (Python-style) |
 | `in` | Membership (lists, sets, dict keys). Negate: `not x in s` |
@@ -415,11 +418,11 @@ two_sum := (nums: @[], target) -> @[] {
 Multiple bindings on left side of `:=` or `::=`. Right side fully evaluated first.
 
 ```
-a, b    := b, a              // swap (immutable)
+a, b    := b, a              // bind fresh a, b from a tuple (immutable)
 _, b    := get_pair()        // discard first
 x, y    := y, x + y          // Fibonacci step
 
-a, b    ::= b, a             // swap (mutable — lets you reassign a, b later)
+a, b    ::= b, a             // reassign existing a, b (swap) — requires ::=
 
 { name, hp, _ } := player    // struct destructure, skip speed
 { x, _, z } := pos           // skip y

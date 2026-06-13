@@ -157,7 +157,8 @@ For multi-module Cargo projects, use `homunc --emit-runtime > src/runtime.rs` to
 
 | Homun Feature | Rust Output |
 |---|---|
-| `x := 10` | `let mut x = 10;` |
+| `x := 10` | `let x = 10;` (immutable; reassigning `x` is a compile error) |
+| `x ::= 10` | `let mut x = 10;` (reassignable) |
 | `fn := (a, b) -> { a + b }` | `pub fn fn<T,U>(a: T, b: U) -> _ { a + b }` |
 | `fn := (a: int) -> int { ... }` | `pub fn fn(a: i32) -> i32 { ... }` |
 | `fib := (n) -> { fib(n-1) }` | recursive fn via `fn fib<T>(...) -> _` |
@@ -183,6 +184,7 @@ The `Sema` pass enforces Homun's rules **before** codegen:
 
 1. **snake_case** — all variable and lambda names must be `snake_case`
 2. **Undefined references** — references to names not yet defined → compile error (skipped when `.rs` deps are present since sema can't introspect Rust files)
+3. **Immutability** — a `:=` binding is immutable: re-binding or reassigning that name (via `:=`, `::=`, or an `Assign` to it) is a compile error; use `::=` to declare a mutable binding or pick a new name. Runs always (independent of `.rs` deps). Params are exempt (they compile to `mut` bindings).
 
 ---
 

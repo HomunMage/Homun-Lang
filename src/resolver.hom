@@ -50,24 +50,24 @@ resolve_file := (rs::ResolverState, path: str) -> ResolveFileResult {
   color := str_dict_get(rs.color, canonical, "White")
 
   if (color == "Black") {
-    exports_list := @[]
-    fi := 0
+    exports_list ::= @[]
+    fi ::= 0
     while (fi < len(rs.files)) {
       if (rs.files[fi].path == canonical) {
-        exports_list := rs.files[fi].exports
+        exports_list ::= rs.files[fi].exports
       }
-      fi := fi + 1
+      fi ::= fi + 1
     }
     Ok(exports_list)
   } else {
     if (color == "Gray") {
-      parts := @[]
-      found_in_stack := false
-      si := 0
+      parts ::= @[]
+      found_in_stack ::= false
+      si ::= 0
       while (si < len(rs.stack)) {
-        if (rs.stack[si] == canonical) { found_in_stack := true }
-        if (found_in_stack) { parts := parts + @[rs.stack[si]] }
-        si := si + 1
+        if (rs.stack[si] == canonical) { found_in_stack ::= true }
+        if (found_in_stack) { parts ::= parts + @[rs.stack[si]] }
+        si ::= si + 1
       }
       parts_str := join(parts, " -> ")
       Err("Import cycle detected: ${parts_str} -> ${canonical}")
@@ -77,16 +77,16 @@ resolve_file := (rs::ResolverState, path: str) -> ResolveFileResult {
       rs.stack := vec_push(rs.stack, canonical)
 
       source := fs_read(canonical)?
-      tokens := do_lex(source)?
+      tokens ::= do_lex(source)?
       ast := do_parse(tokens)?
 
       parent_dir := path_parent(canonical)
-      imported_names := hashset_new()
-      has_rs_dep := false
+      imported_names ::= hashset_new()
+      has_rs_dep ::= false
 
       // ── Process use statements ───────────────────────────────────────────
       n := len(ast)
-      i := 0
+      i ::= 0
       while (i < n) {
         match ast[i] {
           Stmt.Use(segs) -> {
@@ -97,14 +97,14 @@ resolve_file := (rs::ResolverState, path: str) -> ResolveFileResult {
 
               if (fd_kind == "Hom") {
                 dep_exports := resolve_file(rs, fd_path)?
-                imported_names := hashset_extend(imported_names, hashset_from_vec(dep_exports))
+                imported_names ::= hashset_extend(imported_names, hashset_from_vec(dep_exports))
                 rs.resolved_hom_names := vec_push(rs.resolved_hom_names, dep_name)
               }
 
               if (fd_kind == "Rs") {
                 rs_file_content := expand_rs_file(fd_path)?
                 rs.resolved_rs_content := str_dict_set(rs.resolved_rs_content, dep_name, rs_file_content)
-                has_rs_dep := true
+                has_rs_dep ::= true
               }
 
               if (fd_kind == "None") {
@@ -115,9 +115,9 @@ resolve_file := (rs::ResolverState, path: str) -> ResolveFileResult {
                   Some(emb_content) -> {
                     if (not skip_embed) {
                       rs.resolved_rs_content := str_dict_set(rs.resolved_rs_content, dep_name, emb_content)
-                      has_rs_dep := true
+                      has_rs_dep ::= true
                     } else {
-                      has_rs_dep := true
+                      has_rs_dep ::= true
                       rs.resolved_hom_names := vec_push(rs.resolved_hom_names, dep_name)
                     }
                   }
@@ -127,7 +127,7 @@ resolve_file := (rs::ResolverState, path: str) -> ResolveFileResult {
           }
           _ -> {}
         }
-        i := i + 1
+        i ::= i + 1
       }
 
       // ── Semantic analysis ────────────────────────────────────────────────
@@ -143,16 +143,16 @@ resolve_file := (rs::ResolverState, path: str) -> ResolveFileResult {
         rust_code := do_codegen(ast, hom_names, rs_content_map)
 
         // ── Compute exports ──────────────────────────────────────────────
-        exports := @[]
-        ei := 0
+        exports ::= @[]
+        ei ::= 0
         while (ei < len(ast)) {
           match ast[ei] {
-            Stmt.Bind(name, _, _) -> { exports := exports + @[name] }
-            Stmt.StructDef(name, _, _) -> { exports := exports + @[name] }
-            Stmt.EnumDef(name, _, _) -> { exports := exports + @[name] }
+            Stmt.Bind(name, _, _) -> { exports ::= exports + @[name] }
+            Stmt.StructDef(name, _, _) -> { exports ::= exports + @[name] }
+            Stmt.EnumDef(name, _, _) -> { exports ::= exports + @[name] }
             _ -> {}
           }
-          ei := ei + 1
+          ei ::= ei + 1
         }
 
         rs.stack := vec_pop(rs.stack)

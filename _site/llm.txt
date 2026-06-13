@@ -20,10 +20,15 @@ speed := 3.14
 active := true
 ch := 'a'                     // char (single quotes)
 nothing := none
+// x := 20                    // COMPILE ERROR: ':=' cannot reassign an immutable binding
 
 counter ::= 0                 // mutable (let mut)
 counter ::= counter + 1       // reassignment (same name in scope)
 ```
+A `:=` binding is immutable. Reassigning it — with `:=`, `::=`, an `Assign`
+(`x.f := …`, `x[i] := …`), or in-place mutation (`push`, `heap_push`, `set_add`,
+…) — is a compile error. Use `::=` to declare a mutable binding, or a new name.
+Function params are exempt (they are reassignable via `::=`).
 
 ### String Interpolation
 ```hom

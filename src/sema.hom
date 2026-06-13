@@ -20,10 +20,10 @@ use scope
 
 errs_join := (a: @[str], b: @[str]) -> @[str] {
   result ::= a
-  i := 0
+  i ::= 0
   while (i < len(b)) {
     push(result, b[i])
-    i := i + 1
+    i ::= i + 1
   }
   result
 }
@@ -36,11 +36,11 @@ pat_names := (pat: Pat) -> @[str] {
     Pat.Var(name) -> @[name]
     Pat.Tuple(pats) -> {
       n := len(pats)
-      i := 0
-      names := @[]
+      i ::= 0
+      names ::= @[]
       while (i < n) {
-        names := errs_join(names, pat_names(pats[i]))
-        i := i + 1
+        names ::= errs_join(names, pat_names(pats[i]))
+        i ::= i + 1
       }
       names
     }
@@ -60,30 +60,30 @@ pat_names := (pat: Pat) -> @[str] {
 // Returns a new independent Scope with all names from the pattern added.
 
 extend_with_pat := (env: Scope, pat: Pat) -> Scope {
-  result := scope_clone(env)
+  result ::= scope_clone(env)
   match pat {
     Pat.Var(name) -> {
-      result := scope_insert(result, name)
+      result ::= scope_insert(result, name)
     }
     Pat.Tuple(pats) -> {
       n := len(pats)
-      i := 0
+      i ::= 0
       while (i < n) {
-        result := extend_with_pat(result, pats[i])
-        i := i + 1
+        result ::= extend_with_pat(result, pats[i])
+        i ::= i + 1
       }
     }
     Pat.Enum(_, epats) -> {
       n := len(epats)
-      i := 0
+      i ::= 0
       while (i < n) {
-        result := extend_with_pat(result, epats[i])
-        i := i + 1
+        result ::= extend_with_pat(result, epats[i])
+        i ::= i + 1
       }
     }
     Pat.Or(or_pats) -> {
       if (len(or_pats) > 0) {
-        result := extend_with_pat(result, or_pats[0])
+        result ::= extend_with_pat(result, or_pats[0])
       }
     }
     _ -> {}
@@ -97,27 +97,27 @@ extend_with_pat := (env: Scope, pat: Pat) -> Scope {
 // any Bind/StructDef/EnumDef/BindPat statement in stmts.
 
 stmts_bound := (env: Scope, stmts: @[Stmt]) -> Scope {
-  result := scope_clone(env)
+  result ::= scope_clone(env)
   n := len(stmts)
-  i := 0
+  i ::= 0
   while (i < n) {
     match stmts[i] {
       Stmt.Bind(name, _, _)
         | Stmt.BindMut(name, _, _)
         | Stmt.StructDef(name, _, _)
         | Stmt.EnumDef(name, _, _)
-        | Stmt.ThreadLocal(name, _) -> { result := scope_insert(result, name) }
+        | Stmt.ThreadLocal(name, _) -> { result ::= scope_insert(result, name) }
       Stmt.BindPat(pat, _) | Stmt.BindPatMut(pat, _) -> {
-        names := pat_names(pat)
-        j := 0
+        names ::= pat_names(pat)
+        j ::= 0
         while (j < len(names)) {
-          result := scope_insert(result, names[j])
-          j := j + 1
+          result ::= scope_insert(result, names[j])
+          j ::= j + 1
         }
       }
       _ -> {}
     }
-    i := i + 1
+    i ::= i + 1
   }
   result
 }
@@ -128,30 +128,30 @@ stmts_bound := (env: Scope, stmts: @[Stmt]) -> Scope {
 // environment as new names are bound.
 
 check_stmts := (env: Scope, stmts: @[Stmt]) -> @[str] {
-  local_env := scope_clone(env)
-  errs := @[]
+  local_env ::= scope_clone(env)
+  errs ::= @[]
   n := len(stmts)
-  i := 0
+  i ::= 0
   while (i < n) {
     s := stmts[i]
-    errs := errs_join(errs, check_stmt(local_env, s))
+    errs ::= errs_join(errs, check_stmt(local_env, s))
     match s {
       Stmt.Bind(name, _, _)
         | Stmt.BindMut(name, _, _)
         | Stmt.StructDef(name, _, _)
         | Stmt.EnumDef(name, _, _)
-        | Stmt.ThreadLocal(name, _) -> { local_env := scope_insert(local_env, name) }
+        | Stmt.ThreadLocal(name, _) -> { local_env ::= scope_insert(local_env, name) }
       Stmt.BindPat(pat, _) | Stmt.BindPatMut(pat, _) -> {
-        names := pat_names(pat)
-        j := 0
+        names ::= pat_names(pat)
+        j ::= 0
         while (j < len(names)) {
-          local_env := scope_insert(local_env, names[j])
-          j := j + 1
+          local_env ::= scope_insert(local_env, names[j])
+          j ::= j + 1
         }
       }
       _ -> {}
     }
-    i := i + 1
+    i ::= i + 1
   }
   errs
 }
@@ -203,15 +203,15 @@ check_expr := (env: Scope, expr: Expr) -> @[str] {
   match e_dispatch {
     Expr.Lambda(explicit_gen, params, _, _, lam_stmts, fe) -> {
       mixing_errs := if (len(explicit_gen) > 0) {
-        has_untyped := false
-        pi2 := 0
+        has_untyped ::= false
+        pi2 ::= 0
         pn2 := len(params)
         while (pi2 < pn2) {
           p := params[pi2]
           if (p.name != "_") {
-            if (p.ty.is_none()) { has_untyped := true }
+            if (p.ty.is_none()) { has_untyped ::= true }
           }
-          pi2 := pi2 + 1
+          pi2 ::= pi2 + 1
         }
         if (has_untyped) {
           @[str("SEMA ERROR: cannot mix explicit <T:...> generics with implicit untyped params in same function")]
@@ -221,12 +221,12 @@ check_expr := (env: Scope, expr: Expr) -> @[str] {
       } else {
         @[]
       }
-      env2 := scope_clone(env)
+      env2 ::= scope_clone(env)
       pn := len(params)
-      pi := 0
+      pi ::= 0
       while (pi < pn) {
-        env2 := scope_insert(env2, params[pi].name)
-        pi := pi + 1
+        env2 ::= scope_insert(env2, params[pi].name)
+        pi ::= pi + 1
       }
       lam_errs := check_stmts(env2, lam_stmts)
       env_final := stmts_bound(env2, lam_stmts)
@@ -262,53 +262,53 @@ check_expr := (env: Scope, expr: Expr) -> @[str] {
     }
     Expr.List(items) -> {
       n := len(items)
-      i := 0
-      errs := @[]
+      i ::= 0
+      errs ::= @[]
       while (i < n) {
-        errs := errs_join(errs, check_expr(env, items[i]))
-        i := i + 1
+        errs ::= errs_join(errs, check_expr(env, items[i]))
+        i ::= i + 1
       }
       errs
     }
     Expr.Set(items) -> {
       n := len(items)
-      i := 0
-      errs := @[]
+      i ::= 0
+      errs ::= @[]
       while (i < n) {
-        errs := errs_join(errs, check_expr(env, items[i]))
-        i := i + 1
+        errs ::= errs_join(errs, check_expr(env, items[i]))
+        i ::= i + 1
       }
       errs
     }
     Expr.Tuple(items) -> {
       n := len(items)
-      i := 0
-      errs := @[]
+      i ::= 0
+      errs ::= @[]
       while (i < n) {
-        errs := errs_join(errs, check_expr(env, items[i]))
-        i := i + 1
+        errs ::= errs_join(errs, check_expr(env, items[i]))
+        i ::= i + 1
       }
       errs
     }
     Expr.Dict(pairs) -> {
       n := len(pairs)
-      i := 0
-      errs := @[]
+      i ::= 0
+      errs ::= @[]
       while (i < n) {
         k_e, v_e := pairs[i]
-        errs := errs_join(errs, errs_join(check_expr(env, k_e), check_expr(env, v_e)))
-        i := i + 1
+        errs ::= errs_join(errs, errs_join(check_expr(env, k_e), check_expr(env, v_e)))
+        i ::= i + 1
       }
       errs
     }
     Expr.Struct(_, fields) -> {
       n := len(fields)
-      i := 0
-      errs := @[]
+      i ::= 0
+      errs ::= @[]
       while (i < n) {
         fname, f_e := fields[i]
-        errs := errs_join(errs, check_expr(env, f_e))
-        i := i + 1
+        errs ::= errs_join(errs, check_expr(env, f_e))
+        i ::= i + 1
       }
       errs
     }
@@ -318,11 +318,11 @@ check_expr := (env: Scope, expr: Expr) -> @[str] {
     Expr.Call(f, args) -> {
       f_errs := check_expr(env, f)
       an := len(args)
-      ai := 0
-      arg_errs := @[]
+      ai ::= 0
+      arg_errs ::= @[]
       while (ai < an) {
-        arg_errs := errs_join(arg_errs, check_expr(env, args[ai]))
-        ai := ai + 1
+        arg_errs ::= errs_join(arg_errs, check_expr(env, args[ai]))
+        ai ::= ai + 1
       }
       errs_join(f_errs, arg_errs)
     }
@@ -339,18 +339,18 @@ check_expr := (env: Scope, expr: Expr) -> @[str] {
     Expr.Match(scrut, arms) -> {
       sc_errs := check_expr(env, scrut)
       an := len(arms)
-      ai := 0
-      arm_errs := @[]
+      ai ::= 0
+      arm_errs ::= @[]
       while (ai < an) {
-        arm_errs := errs_join(arm_errs, check_arm(env, arms[ai]))
-        ai := ai + 1
+        arm_errs ::= errs_join(arm_errs, check_arm(env, arms[ai]))
+        ai ::= ai + 1
       }
       errs_join(sc_errs, arm_errs)
     }
     Expr.For(v, iter, body_stmts, _) -> {
       fe_opt     := expr_for_final(expr)
-      env2       := scope_clone(env)
-      env2       := scope_insert(env2, v)
+      env2       ::= scope_clone(env)
+      env2       ::= scope_insert(env2, v)
       iter_errs  := check_expr(env, iter)
       body_errs  := check_stmts(env2, body_stmts)
       env_final  := stmts_bound(env2, body_stmts)
@@ -397,7 +397,7 @@ check_expr := (env: Scope, expr: Expr) -> @[str] {
 check_arm := (env: Scope, arm: MatchArm) -> @[str] {
   // extend_with_pat uses arm.pat as a function arg → .clone() is emitted,
   // so arm.pat is NOT moved here and remains accessible below.
-  env2    := extend_with_pat(env, arm.pat)
+  env2    ::= extend_with_pat(env, arm.pat)
   g_opt   := arm.guard
   body    := arm.body
   // Validate or-pattern: all alternatives must bind the same names.
@@ -405,15 +405,15 @@ check_arm := (env: Scope, arm: MatchArm) -> @[str] {
   or_errs := match arm.pat {
     Pat.Or(or_pats) -> {
       n_or := len(or_pats)
-      all_ok := true
+      all_ok ::= true
       ref_str := join(pat_names(or_pats[0]), ",")
-      ki := 1
+      ki ::= 1
       while (ki < n_or) {
         alt_str := join(pat_names(or_pats[ki]), ",")
         if (ref_str != alt_str) {
-          all_ok := false
+          all_ok ::= false
         }
-        ki := ki + 1
+        ki ::= ki + 1
       }
       if (not all_ok) {
         @[str("SEMA ERROR: or-pattern alternatives must bind the same names")]
@@ -431,6 +431,270 @@ check_arm := (env: Scope, arm: MatchArm) -> @[str] {
 }
 
 
+// ─── Immutability check ──────────────────────────────────────────────────────
+// Enforces that `:=` (Bind) declares an immutable name: it may not be re-bound
+// in the same scope, reassigned with `::=`, or mutated via Assign. `::=`
+// (BindMut) declares a mutable name and may be reassigned. Cross-scope shadowing
+// is allowed; same-scope rebinding of an immutable name is an error.
+//
+//   vis  — names visible from enclosing scopes
+//   vmut — subset of vis that is mutable (declared with ::= or a `::` param)
+
+// Root variable name of an assignment target (peels Field/Index).
+immut_lvalue_root := (lv: LValue) -> str {
+  match lv {
+    LValue.Var(n) -> n
+    LValue.Field(base, _) -> immut_lvalue_root(base)
+    LValue.Index(base, _) -> immut_lvalue_root(base)
+  }
+}
+
+// Recurse into the index expressions of an lvalue (Field/Var carry no exprs).
+immut_lvalue_exprs := (lv: LValue, vis: @[str], vmut: @[str]) -> @[str] {
+  match lv {
+    LValue.Index(base, idx) -> errs_join(immut_lvalue_exprs(base, vis, vmut), immut_expr(idx, vis, vmut))
+    LValue.Field(base, _) -> immut_lvalue_exprs(base, vis, vmut)
+    _ -> @[]
+  }
+}
+
+// All names bound by a block's statements (superset used for final-expr scope).
+imm_block_bound := (stmts: @[Stmt]) -> @[str] {
+  out ::= @[]
+  for s in stmts {
+    match s {
+      Stmt.Bind(n, _, _) | Stmt.BindMut(n, _, _) -> { out ::= out + @[n] }
+      Stmt.BindPat(p, _) | Stmt.BindPatMut(p, _) -> { out ::= errs_join(out, pat_names(p)) }
+      _ -> {}
+    }
+  }
+  out
+}
+
+// Names a block binds mutably (via ::= / BindPatMut).
+imm_block_muts := (stmts: @[Stmt]) -> @[str] {
+  out ::= @[]
+  for s in stmts {
+    match s {
+      Stmt.BindMut(n, _, _) -> { out ::= out + @[n] }
+      Stmt.BindPatMut(p, _) -> { out ::= errs_join(out, pat_names(p)) }
+      _ -> {}
+    }
+  }
+  out
+}
+
+immut_each := (items: @[Expr], vis: @[str], vmut: @[str]) -> @[str] {
+  out ::= @[]
+  for it in items {
+    out ::= errs_join(out, immut_expr(it, vis, vmut))
+  }
+  out
+}
+
+// Recurse through an expression looking for nested scopes (lambdas, control
+// flow) that contain reassignment statements.
+immut_expr := (e: Expr, vis: @[str], vmut: @[str]) -> @[str] {
+  ed := e
+  match ed {
+    Expr.Field(base, _) -> immut_expr(base, vis, vmut)
+    Expr.Index(base, idx) -> errs_join(immut_expr(base, vis, vmut), immut_expr(idx, vis, vmut))
+    Expr.Slice(b, _, _, _) -> {
+      errs ::= immut_expr(b, vis, vmut)
+      match expr_slice_from(e) { none -> {} Some(x) -> { errs ::= errs_join(errs, immut_expr(x, vis, vmut)) } }
+      match expr_slice_to(e)   { none -> {} Some(x) -> { errs ::= errs_join(errs, immut_expr(x, vis, vmut)) } }
+      match expr_slice_step(e) { none -> {} Some(x) -> { errs ::= errs_join(errs, immut_expr(x, vis, vmut)) } }
+      errs
+    }
+    Expr.List(items) -> immut_each(items, vis, vmut)
+    Expr.Set(items) -> immut_each(items, vis, vmut)
+    Expr.Tuple(items) -> immut_each(items, vis, vmut)
+    Expr.Dict(pairs) -> {
+      out ::= @[]
+      for p in pairs {
+        k_e, v_e := p
+        out ::= errs_join(out, errs_join(immut_expr(k_e, vis, vmut), immut_expr(v_e, vis, vmut)))
+      }
+      out
+    }
+    Expr.Struct(_, fields) -> {
+      out ::= @[]
+      for f in fields {
+        f_name, f_e := f
+        out ::= errs_join(out, immut_expr(f_e, vis, vmut))
+      }
+      out
+    }
+    Expr.BinOp(_, l, r) -> errs_join(immut_expr(l, vis, vmut), immut_expr(r, vis, vmut))
+    Expr.Pipe(l, r) -> errs_join(immut_expr(l, vis, vmut), immut_expr(r, vis, vmut))
+    Expr.UnOp(_, x) -> immut_expr(x, vis, vmut)
+    Expr.Call(f, args) -> errs_join(immut_expr(f, vis, vmut), immut_each(args, vis, vmut))
+    Expr.Lambda(_, params, _, _, lam_stmts, fe) -> {
+      pvis ::= vis
+      pvmut ::= vmut
+      for p in params {
+        if (p.name != "_") {
+          // Params compile to `mut` bindings in Rust, so they are reassignable
+          // via `::=` (they are not `:=` declarations, so the immutable rule
+          // does not apply to them).
+          pn := p.name
+          pvis ::= pvis + @[p.name]
+          pvmut ::= pvmut + @[pn]
+        }
+      }
+      body_errs := immut_stmts(lam_stmts, pvis, pvmut)
+      vis2 := errs_join(pvis, imm_block_bound(lam_stmts))
+      vmut2 := errs_join(pvmut, imm_block_muts(lam_stmts))
+      errs_join(body_errs, immut_expr(fe, vis2, vmut2))
+    }
+    Expr.If(cond, then_stmts, then_fe, _) -> {
+      cond_errs := immut_expr(cond, vis, vmut)
+      then_errs := immut_stmts(then_stmts, vis, vmut)
+      tvis := errs_join(vis, imm_block_bound(then_stmts))
+      tvmut := errs_join(vmut, imm_block_muts(then_stmts))
+      then_fe_errs := immut_expr(then_fe, tvis, tvmut)
+      else_errs := if (expr_if_has_else(e)) {
+        es := expr_if_else_stmts(e)
+        e_body := immut_stmts(es, vis, vmut)
+        evis := errs_join(vis, imm_block_bound(es))
+        evmut := errs_join(vmut, imm_block_muts(es))
+        errs_join(e_body, immut_expr(expr_if_else_expr(e), evis, evmut))
+      } else { @[] }
+      errs_join(cond_errs, errs_join(then_errs, errs_join(then_fe_errs, else_errs)))
+    }
+    Expr.For(v, iter, body_stmts, _) -> {
+      iter_errs := immut_expr(iter, vis, vmut)
+      bvis := vis + @[v]
+      body_errs := immut_stmts(body_stmts, bvis, vmut)
+      fe_errs := match expr_for_final(e) {
+        none -> @[]
+        Some(x) -> immut_expr(x, errs_join(bvis, imm_block_bound(body_stmts)), errs_join(vmut, imm_block_muts(body_stmts)))
+      }
+      errs_join(iter_errs, errs_join(body_errs, fe_errs))
+    }
+    Expr.While(cond, body_stmts, _) -> {
+      cond_errs := immut_expr(cond, vis, vmut)
+      body_errs := immut_stmts(body_stmts, vis, vmut)
+      fe_errs := match expr_while_final(e) {
+        none -> @[]
+        Some(x) -> immut_expr(x, errs_join(vis, imm_block_bound(body_stmts)), errs_join(vmut, imm_block_muts(body_stmts)))
+      }
+      errs_join(cond_errs, errs_join(body_errs, fe_errs))
+    }
+    Expr.Block(stmts, fe) -> {
+      body_errs := immut_stmts(stmts, vis, vmut)
+      errs_join(body_errs, immut_expr(fe, errs_join(vis, imm_block_bound(stmts)), errs_join(vmut, imm_block_muts(stmts))))
+    }
+    Expr.Match(scrut, arms) -> {
+      errs ::= immut_expr(scrut, vis, vmut)
+      for arm in arms {
+        avis := errs_join(vis, pat_names(arm.pat))
+        match arm.guard { none -> {} Some(g) -> { errs ::= errs_join(errs, immut_expr(g, avis, vmut)) } }
+        errs ::= errs_join(errs, immut_expr(arm.body, avis, vmut))
+      }
+      errs
+    }
+    Expr.Break(_) -> {
+      match expr_break_value(e) { none -> @[] Some(x) -> immut_expr(x, vis, vmut) }
+    }
+    Expr.EarlyReturn(x) -> immut_expr(x, vis, vmut)
+    Expr.TryUnwrap(x) -> immut_expr(x, vis, vmut)
+    _ -> @[]
+  }
+}
+
+// Recurse into the expressions held by a single statement.
+immut_stmt_exprs := (s: Stmt, vis: @[str], vmut: @[str]) -> @[str] {
+  match s {
+    Stmt.Bind(_, e, _) -> immut_expr(e, vis, vmut)
+    Stmt.BindMut(_, e, _) -> immut_expr(e, vis, vmut)
+    Stmt.BindPat(_, e) | Stmt.BindPatMut(_, e) -> immut_expr(e, vis, vmut)
+    Stmt.Assign(lhs, e) -> errs_join(immut_lvalue_exprs(lhs, vis, vmut), immut_expr(e, vis, vmut))
+    Stmt.Expression(e) -> immut_expr(e, vis, vmut)
+    Stmt.ThreadLocal(_, e) -> immut_expr(e, vis, vmut)
+    _ -> @[]
+  }
+}
+
+// Walk a block's statements in order, enforcing the immutability rules and
+// tracking names bound in this scope (cur) and which of them are mutable (cmut).
+immut_stmts := (stmts: @[Stmt], vis: @[str], vmut: @[str]) -> @[str] {
+  errs ::= @[]
+  cur ::= @[]
+  cmut ::= @[]
+  i ::= 0
+  while (i < len(stmts)) {
+    s := stmts[i]
+    errs ::= errs_join(errs, immut_stmt_exprs(s, errs_join(vis, cur), errs_join(vmut, cmut)))
+    match s {
+      Stmt.Bind(name, _, _) -> {
+        all_vis := errs_join(vis, cur)
+        if (name in all_vis) {
+          errs ::= errs + @["SEMA ERROR: '${name}' is immutable — ':=' cannot reassign an existing binding; use '::=' or a new name"]
+        } else {
+          cur ::= cur + @[name]
+        }
+      }
+      Stmt.BindMut(name, _, _) -> {
+        all_vis := errs_join(vis, cur)
+        all_mut := errs_join(vmut, cmut)
+        if (name in all_vis) {
+          if (not (name in all_mut)) {
+            errs ::= errs + @["SEMA ERROR: '${name}' was declared immutable with ':=' — cannot reassign with '::='"]
+          }
+        } else {
+          cur ::= cur + @[name]
+          nm := cur[len(cur) - 1]
+          cmut ::= cmut + @[nm]
+        }
+      }
+      Stmt.BindPat(pat, _) -> {
+        for n in pat_names(pat) {
+          if (n != "_") {
+            all_vis := errs_join(vis, cur)
+            if (n in all_vis) {
+              errs ::= errs + @["SEMA ERROR: '${n}' is immutable — ':=' cannot reassign an existing binding; use '::=' or a new name"]
+            } else {
+              cur ::= cur + @[n]
+            }
+          }
+        }
+      }
+      Stmt.BindPatMut(pat, _) -> {
+        for n in pat_names(pat) {
+          if (n != "_") {
+            all_vis := errs_join(vis, cur)
+            all_mut := errs_join(vmut, cmut)
+            if (n in all_vis) {
+              if (not (n in all_mut)) {
+                errs ::= errs + @["SEMA ERROR: '${n}' was declared immutable with ':=' — cannot reassign with '::='"]
+              }
+            } else {
+              cur ::= cur + @[n]
+              nn := cur[len(cur) - 1]
+              cmut ::= cmut + @[nn]
+            }
+          }
+        }
+      }
+      Stmt.Assign(lhs, _) -> {
+        root := immut_lvalue_root(lhs)
+        all_vis := errs_join(vis, cur)
+        all_mut := errs_join(vmut, cmut)
+        visible := root in all_vis
+        is_mut := root in all_mut
+        if (visible and not is_mut) {
+          errs ::= errs + @["SEMA ERROR: cannot mutate immutable '${root}' — declare it with ::="]
+        }
+      }
+      _ -> {}
+    }
+    i ::= i + 1
+  }
+  errs
+}
+
+
 // ─── run_sema ────────────────────────────────────────────────────────────────
 // Core entry point.  Builds the initial environment (builtins + top-level
 // names + imported names) and runs undefined-reference checking unless
@@ -439,28 +703,34 @@ check_arm := (env: Scope, arm: MatchArm) -> @[str] {
 run_sema := (prog: @[Stmt], imported_list: @[str], skip_undef: bool) -> @[str] {
   builtins := scope_from_list(@["print", "str", "int", "float", "bool", "Ok", "Err", "Some", "Char"])
 
-  top_names := scope_new()
+  top_names ::= scope_new()
   pn := len(prog)
-  pi := 0
+  pi ::= 0
   while (pi < pn) {
     match prog[pi] {
       Stmt.Bind(name, _, _)
         | Stmt.BindMut(name, _, _)
         | Stmt.StructDef(name, _, _)
         | Stmt.EnumDef(name, _, _)
-        | Stmt.ThreadLocal(name, _) -> { top_names := scope_insert(top_names, name) }
+        | Stmt.ThreadLocal(name, _) -> { top_names ::= scope_insert(top_names, name) }
       _ -> {}
     }
-    pi := pi + 1
+    pi ::= pi + 1
   }
 
   imported := scope_from_list(imported_list)
   env0     := scope_union(scope_union(builtins, top_names), imported)
 
-  errs := @[]
+  errs ::= @[]
   if (not skip_undef) {
-    errs := check_stmts(env0, prog)
+    errs ::= check_stmts(env0, prog)
   }
+  // Immutability check runs always — it is independent of .rs deps.
+  // Top-level names are NOT pre-seeded into `vis`; they are added to the
+  // current scope as the walk reaches each definition (otherwise every
+  // top-level binding would look like a reassignment of a visible name).
+  imm_env := scope_union(builtins, imported)
+  errs ::= errs_join(errs, immut_stmts(prog, scope_to_list(imm_env), @[]))
   errs
 }
 

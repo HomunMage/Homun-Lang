@@ -19,7 +19,7 @@ main := () -> _ {
   print("=== test_heap ===")
 
   // ── heap_new / heap_is_empty / heap_len on fresh heap ──────────────────────
-  h := heap_new()
+  h ::= heap_new()
   if (heap_is_empty(h)) {
     print("  ok: new heap is_empty")
   } else {
@@ -79,7 +79,7 @@ main := () -> _ {
   }
 
   // ── heap_pop on empty heap does not crash ──────────────────────────────────
-  h2 := heap_new()
+  h2 ::= heap_new()
   heap_pop(h2)
   if (heap_is_empty(h2)) {
     print("  ok: pop on empty is safe")
@@ -93,7 +93,7 @@ main := () -> _ {
   }
 
   // ── min-heap order: lower priority pops first ──────────────────────────────
-  h3 := heap_new()
+  h3 ::= heap_new()
   heap_push(h3, 10, "ten")
   heap_push(h3, 3,  "three")
   heap_push(h3, 7,  "seven")
@@ -114,7 +114,7 @@ main := () -> _ {
   }
 
   // ── A* frontier pattern ────────────────────────────────────────────────────
-  frontier := heap_new()
+  frontier ::= heap_new()
   heap_push(frontier, 10, "node_A")
   heap_push(frontier, 3,  "node_D")
   heap_push(frontier, 7,  "node_B")
@@ -152,7 +152,7 @@ main := () -> _ {
   }
 
   // ── negative priorities ────────────────────────────────────────────────────
-  h4 := heap_new()
+  h4 ::= heap_new()
   heap_push(h4, -5, "neg5")
   heap_push(h4,  0, "zero")
   heap_push(h4, -1, "neg1")

@@ -6,18 +6,32 @@ Branches: `history` (spec drafts), `haskell` (Haskell compiler), `rust` (Rust re
 
 ---
 
+### v0.93 — 2026-06-13 — `:=` is truly immutable (no reassignment)
+
+`:=` now means an **immutable** binding, enforced end-to-end. Previously `:=` and `::=` were codegen-identical (both emitted `let mut` and silently allowed reassignment), so the immutability `:=` claimed was never enforced. Net diff: **+846 / −501** across 17 files.
+
+- `codegen.hom`: `:=` → `let` (immutable), `::=` → `let mut` / reassignment; tuple binds `a, b :=` → `let (a, b)`, `a, b ::=` → mutable
+- `sema.hom`: new immutability pass — rebinding or reassigning a `:=` name (via `:=`, `::=`, or `Assign`) is a compile error; `::=` reassigns a mutable. Runs always (independent of `.rs` deps); params are exempt (they compile to `mut`). No shadowing — a name visible from any enclosing scope cannot be re-`:=`-bound
+- migrated every reassigned / in-place-mutated local in the compiler's own `.hom` sources + all `_site/examples` and `tests` from `:=` → `::=` (loop counters, accumulators, `push`/`heap_push` targets); self-host fixpoint holds (stage-2 ≡ stage-3 byte-identical)
+- new `tests/immutability.rs` regression suite
+- 153 tests pass, `cargo fmt` + `cargo clippy --release -- -D warnings` clean
+
+---
+
 ### v0.92 — 2026-06-01 — AST robustness + kill `dep/` + indirect-recursion auto-Box
 
-Net diff: **+380 / −721** across 15 files.
+Made the AST fully positional, deleted the `dep/` directory by folding its helpers into `codegen_imp.rs`, and taught auto-Box to handle indirect recursion. Net diff: **+397 / −722** across 17 files.
 
-- AST 100% positional: `Lambda` named-field → 6-field positional; delete 10 Rust accessors/constructors
+- AST 100% positional: `Lambda` named-field → 6-field positional; delete 10 Rust accessors/constructors (`src/ast.hom`)
 - New `LValue` enum: `Stmt.Assign(LValue, Expr)` restricts lhs to valid targets
 - `BindMut` now carries attrs `@[str]`, aligned with `Bind`
 - Removed dead `LoadRon`/`SaveRon` variants (never constructed by parser)
-- Killed `dep/` directory: content → `codegen_imp.rs`, lib.rs rewired to `use crate::ast::*`
+- Killed `dep/` directory: `dep/codegen_helpers.rs` (−262) + `dep/mod.rs` (−16) deleted; content → new `src/codegen_imp.rs` (+122); `lib.rs` rewired to `use crate::ast::*`
 - Auto-Box supports indirect recursion (all enum names registered upfront in pre-pass)
 - Type-specific helpers → generics: `vec_extend<T>`, `vec_push<T>`, `vec_pop<T>`
+- `.gitignore` cleanup (−124): collapse stale per-artifact entries
 - Reverted the "register all enum names" pre-pass — it over-Boxed `Expr` fields in `Stmt` variants, breaking user code. Restored per-enum register/clear (v0.91 behavior)
+
 ---
 
 ### v0.91 — 2026-05-29 — `--import` stage 3: migrate ~20 lexer/parser/sema dispatch helpers from `_imp.rs` to `.hom` (Hom:Rs 1.92 → 2.65)

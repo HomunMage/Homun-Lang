@@ -15,7 +15,7 @@ scope_clone := (sc: Scope) -> Scope { sc }
 scope_union := (a: Scope, b: Scope) -> Scope {
   result ::= a
   for x in b {
-    result := scope_insert(result, x)
+    result ::= scope_insert(result, x)
   }
   result
 }
