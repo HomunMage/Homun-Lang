@@ -24,16 +24,28 @@ fn compile(src: &str, name: &str) -> (bool, String) {
 
 #[test]
 fn reassigning_immutable_with_colon_eq_is_error() {
-    let (ok, log) = compile("main := () -> _ {\n  x := 10\n  x := 20\n  print(x)\n}\n", "reassign");
+    let (ok, log) = compile(
+        "main := () -> _ {\n  x := 10\n  x := 20\n  print(x)\n}\n",
+        "reassign",
+    );
     assert!(!ok, "expected compile error, got success");
-    assert!(log.contains("immutable"), "expected immutability error, got:\n{log}");
+    assert!(
+        log.contains("immutable"),
+        "expected immutability error, got:\n{log}"
+    );
 }
 
 #[test]
 fn reassigning_immutable_with_colon_colon_eq_is_error() {
-    let (ok, log) = compile("main := () -> _ {\n  x := 10\n  x ::= 20\n  print(x)\n}\n", "mixmut");
+    let (ok, log) = compile(
+        "main := () -> _ {\n  x := 10\n  x ::= 20\n  print(x)\n}\n",
+        "mixmut",
+    );
     assert!(!ok, "expected compile error, got success");
-    assert!(log.contains("immutable"), "expected immutability error, got:\n{log}");
+    assert!(
+        log.contains("immutable"),
+        "expected immutability error, got:\n{log}"
+    );
 }
 
 #[test]
@@ -41,12 +53,18 @@ fn mutating_immutable_field_is_error() {
     let src = "P := struct { hp: int }\nmain := () -> _ {\n  p := P { hp: 1 }\n  p.hp := 2\n}\n";
     let (ok, log) = compile(src, "field");
     assert!(!ok, "expected compile error, got success");
-    assert!(log.contains("immutable"), "expected immutability error, got:\n{log}");
+    assert!(
+        log.contains("immutable"),
+        "expected immutability error, got:\n{log}"
+    );
 }
 
 #[test]
 fn mutable_binding_reassignment_compiles() {
-    let (ok, log) = compile("main := () -> _ {\n  c ::= 0\n  c ::= c + 1\n  print(c)\n}\n", "ok_mut");
+    let (ok, log) = compile(
+        "main := () -> _ {\n  c ::= 0\n  c ::= c + 1\n  print(c)\n}\n",
+        "ok_mut",
+    );
     assert!(ok, "expected success, got:\n{log}");
 }
 
@@ -59,6 +77,9 @@ fn loop_accumulator_with_colon_colon_eq_compiles() {
 
 #[test]
 fn fresh_immutable_bindings_compile() {
-    let (ok, log) = compile("main := () -> _ {\n  x := 1\n  y := x + 1\n  print(y)\n}\n", "ok_fresh");
+    let (ok, log) = compile(
+        "main := () -> _ {\n  x := 1\n  y := x + 1\n  print(y)\n}\n",
+        "ok_fresh",
+    );
     assert!(ok, "expected success, got:\n{log}");
 }
