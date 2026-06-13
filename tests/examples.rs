@@ -98,7 +98,17 @@ fn test_example_quicksort() {
 #[test]
 fn test_example_two_sum() {
     let out = compile_and_run(Path::new("_site/examples/two_sum.hom"));
-    assert!(out.contains("Two Sum:"));
+    assert!(out.contains("Two Sum: [0, 1]"), "got: {}", out);
+    assert!(out.contains("Two Sum: [1, 2]"), "got: {}", out);
+}
+
+#[test]
+fn test_example_valid_parens() {
+    let out = compile_and_run(Path::new("_site/examples/valid_parens.hom"));
+    assert!(out.contains("matched pair    -> true"), "got: {}", out);
+    assert!(out.contains("nested brackets -> true"), "got: {}", out);
+    assert!(out.contains("mismatched      -> false"), "got: {}", out);
+    assert!(out.contains("unclosed        -> false"), "got: {}", out);
 }
 
 #[test]

@@ -1,0 +1,34 @@
+// ─── examples/valid_parens.hom ──────────────────────────────────
+// Demonstrates: stack via a list with ::= mutation, string iteration via
+// chars(), negative-index access (stack[-1]), slice pop (stack[:-1]),
+// early return. Returns true iff every bracket is matched and nested.
+use std
+
+is_valid := (s: str) -> bool {
+  stack ::= @[]
+  for ch in chars(s) {
+    if (ch == "(" or ch == "[" or ch == "{") {
+      stack ::= stack + @[ch]
+    } else {
+      if (len(stack) == 0) { => false }
+      top := stack[-1]
+      ok := (ch == ")" and top == "(")
+        or (ch == "]" and top == "[")
+        or (ch == "}" and top == "{")
+      if (not ok) { => false }
+      stack ::= stack[:-1]
+    }
+  }
+  len(stack) == 0
+}
+
+main := () -> _ {
+  matched := is_valid("()")
+  nested  := is_valid("([]{})")
+  bad     := is_valid("(]")
+  unclos  := is_valid("(()")
+  print("matched pair    -> ${matched}")
+  print("nested brackets -> ${nested}")
+  print("mismatched      -> ${bad}")
+  print("unclosed        -> ${unclos}")
+}

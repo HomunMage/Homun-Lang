@@ -16,15 +16,19 @@ see _site/examples
 
 ```
 // Valid Parentheses
-is_valid := (s) -> {
-  stack := @[]
-  pairs := @{")" : "(", "]" : "[", "}" : "{"}
-  for ch in s {
-    if (ch in "([{") {
-      stack := stack + @[ch]
+is_valid := (s: str) -> bool {
+  stack ::= @[]                  // ::= — pushed/popped below
+  for ch in chars(s) {
+    if (ch == "(" or ch == "[" or ch == "{") {
+      stack ::= stack + @[ch]
     } else {
-      if (len(stack) == 0 or stack[-1] != pairs[ch]) { => false }
-      stack := stack[:-1]
+      if (len(stack) == 0) { => false }
+      top := stack[-1]
+      ok := (ch == ")" and top == "(")
+        or (ch == "]" and top == "[")
+        or (ch == "}" and top == "{")
+      if (not ok) { => false }
+      stack ::= stack[:-1]       // pop
     }
   }
   len(stack) == 0
@@ -43,9 +47,9 @@ quicksort := (arr) -> {
 // DFS — recursive
 dfs := (graph, node, visited) -> {
   if (node in visited) { => visited }
-  visited := visited + @[node]
+  visited ::= visited + @[node]
   for neighbor in graph[node] {
-    visited := dfs(graph, neighbor, visited)
+    visited ::= dfs(graph, neighbor, visited)
   }
   visited
 }
@@ -53,7 +57,7 @@ dfs := (graph, node, visited) -> {
 
 // Pattern Match
 fizz_buzz := (n: int) -> @[str] {
-  result := @[]
+  result ::= @[]
   for i in range(1, n+1) {
     value := match (i % 3, i % 5) {
       (0, 0) -> "FizzBuzz"
@@ -61,7 +65,7 @@ fizz_buzz := (n: int) -> @[str] {
       (_, 0) -> "Buzz"
       _         -> str(i)
     }
-    result := result + @[value]
+    result ::= result + @[value]
   }
   result
 }
@@ -72,39 +76,39 @@ use re
 use heap
 
 top_k_words := (words: @[str], k: int) -> @[str] {
-  keys := @[]
-  counts := @[]
+  keys ::= @[]
+  counts ::= @[]
   for w in words {
     if (len(w) == 0) { continue }
     if (not re_is_match("^[a-zA-Z]+$", w)) { continue }
-    found := false
-    j := 0
+    found ::= false
+    j ::= 0
     while (j < len(keys)) {
       if (keys[j] == w) {
-        counts[j] := counts[j] + 1
-        found := true
+        counts[j] := counts[j] + 1     // index assign — counts is ::= above
+        found ::= true
       }
-      j := j + 1
+      j ::= j + 1
     }
     if (not found) {
-      keys := keys + @[w]
-      counts := counts + @[1]
+      keys ::= keys + @[w]
+      counts ::= counts + @[1]
     }
   }
-  h := heap_new()
-  i := 0
+  h ::= heap_new()
+  i ::= 0
   while (i < len(keys)) {
     heap_push(h, 0 - counts[i], keys[i])
-    i := i + 1
+    i ::= i + 1
   }
-  result := @[]
-  i := 0
+  result ::= @[]
+  i ::= 0
   while (i < k and not heap_is_empty(h)) {
     match heap_pop(h) {
-      Some((_, word)) -> { result := result + @[word] }
+      Some((_, word)) -> { result ::= result + @[word] }
       none -> {}
     }
-    i := i + 1
+    i ::= i + 1
   }
   result
 }
@@ -399,13 +403,15 @@ There is no `return` keyword. The last expression in a block is its value. `=> v
 
 ```
 // Two Sum
-two_sum := (nums: @[], target) -> @[] {
-  seen := @{}
+use dict
+two_sum := (nums: @[int], target) -> @[int] {
+  seen ::= @{}                       // value -> index (mutated, so ::=)
   for i in range(len(nums)) {
     comp := target - nums[i]
     if (comp in seen) { => @[seen[comp], i] }
-    seen[nums[i]] := i
+    dict_insert(seen, nums[i], i)
   }
+  @[]
 }
 ```
 
