@@ -381,8 +381,10 @@ lex := (source: str) -> Result<@[Token], str> {
                 }
               } else {
 
-                // ── Identifier / keyword: alpha start ────────────────────────
-                if (is_alpha(c)) {
+                // ── Identifier / keyword: alpha or `_` start ─────────────────
+                // `_p` is an identifier; a bare `_` stays the wildcard token,
+                // so the next char has to continue an identifier.
+                if (is_alpha(c) or (c == "_" and is_alnum(ls_peek(state, 1)))) {
                   tok := ls_read_ident(state)
                   push(tokens, tok)
                 } else {

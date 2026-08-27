@@ -55,6 +55,78 @@ pub fn make_resolved_program(files: Vec<ResolvedFile>) -> ResolvedProgram {
     ResolvedProgram { files }
 }
 
+// ── --runtime-path ───────────────────────────────────────────────────────────
+// `--module` output uses the Homun runtime's macros and traits (`len!`,
+// `HomunLen`, ...) but has nowhere to import them from, because the consumer
+// decides where the runtime lives. `--runtime-path PATH` emits `use PATH::*;`
+// at the top of each module so the expansion resolves.
+
+thread_local! {
+    static RUNTIME_PATH: std::cell::RefCell<String> =
+        std::cell::RefCell::new(String::new());
+}
+
+/// Set the Rust path the runtime is reachable at, e.g. `super::runtime`.
+pub fn runtime_path_set(path: String) {
+    RUNTIME_PATH.with(|p| *p.borrow_mut() = path);
+}
+
+/// The configured runtime path, or an empty string when none was given.
+pub fn runtime_path_get() -> String {
+    RUNTIME_PATH.with(|p| p.borrow().clone())
+}
+
+// ── --include search path ────────────────────────────────────────────────────
+// `use foo` resolves against the importing file's own directory. `--include DIR`
+// adds directories to search after it, so a host can point the compiler at
+// sources it owns without copying them next to the input.
+
+thread_local! {
+    static INCLUDE_DIRS: std::cell::RefCell<Vec<String>> =
+        std::cell::RefCell::new(Vec::new());
+}
+
+/// Append a directory to the search path. Called once per `--include` flag.
+pub fn include_dir_add(dir: String) {
+    INCLUDE_DIRS.with(|d| d.borrow_mut().push(dir));
+}
+
+/// Drop the search path, so one process can compile independent inputs.
+pub fn include_dirs_clear() {
+    INCLUDE_DIRS.with(|d| d.borrow_mut().clear());
+}
+
+// ── --extern registry ────────────────────────────────────────────────────────
+// `--extern NAME` declares that `use NAME` refers to a module the consumer
+// already provides alongside the output: read nothing, inline nothing, emit a
+// Rust `use` instead.
+//
+// This is `skip_embed` generalised from hom-std to a named dependency. hom-std
+// has no crate to reference, so it must keep being inlined; a linked Rust crate
+// must not be, or every module that mentions it gets its own copy of its types.
+
+thread_local! {
+    static EXTERN_NAMES: std::cell::RefCell<std::collections::HashSet<String>> =
+        std::cell::RefCell::new(std::collections::HashSet::new());
+}
+
+/// Declare `name` external. Called once per `--extern` flag.
+pub fn extern_register(name: String) {
+    EXTERN_NAMES.with(|s| {
+        s.borrow_mut().insert(name);
+    });
+}
+
+/// Was `name` declared external?
+pub fn extern_is(name: String) -> bool {
+    EXTERN_NAMES.with(|s| s.borrow().contains(&name))
+}
+
+/// Drop every declaration, so one process can compile independent inputs.
+pub fn extern_clear() {
+    EXTERN_NAMES.with(|s| s.borrow_mut().clear());
+}
+
 // ── ResolverState constructor ────────────────────────────────────────────────
 // ResolverState is defined in resolver.hom; constructor stays here for
 // HashMap/HashSet/Vec initialization.
@@ -220,13 +292,29 @@ pub fn find_dep(dir: String, name: String) -> (String, String, String) {
 // (after R3 wiring), where crate::lexer_hom, crate::parser, etc. are defined.
 
 /// find_dep wrapper that returns Result instead of (kind, path, err) triple.
+/// Resolve `use name` against the importing file's directory, then against each
+/// `--include` directory in order. An ambiguity inside any one directory is
+/// still an error; the directories themselves are tried in sequence.
 pub fn find_dep_result(dir: String, name: String) -> Result<(String, String), String> {
-    let (kind, path, err) = find_dep(dir, name);
+    let (kind, path, err) = find_dep(dir, name.clone());
     if !err.is_empty() {
-        Err(err)
-    } else {
-        Ok((kind, path))
+        return Err(err);
     }
+    if kind != "None" {
+        return Ok((kind, path));
+    }
+
+    let dirs = INCLUDE_DIRS.with(|d| d.borrow().clone());
+    for extra in dirs {
+        let (kind, path, err) = find_dep(extra, name.clone());
+        if !err.is_empty() {
+            return Err(err);
+        }
+        if kind != "None" {
+            return Ok((kind, path));
+        }
+    }
+    Ok(("None".to_string(), String::new()))
 }
 
 /// Lex source text using the compiled lexer_hom module.

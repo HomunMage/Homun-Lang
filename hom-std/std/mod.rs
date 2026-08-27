@@ -28,6 +28,9 @@ pub trait HomunLen { fn homun_len(&self) -> usize; }
 impl<T> HomunLen for Vec<T>                                { fn homun_len(&self) -> usize { self.len() } }
 impl<K, V> HomunLen for std::collections::HashMap<K, V>    { fn homun_len(&self) -> usize { self.len() } }
 impl<T> HomunLen for std::collections::HashSet<T>          { fn homun_len(&self) -> usize { self.len() } }
+/// Fixed-size arrays have a length like lists, so `len(t.translation)` works on
+/// a Rust `[f32; 3]` field without the host defining a parallel type.
+impl<T, const N: usize> HomunLen for [T; N]                  { fn homun_len(&self) -> usize { N } }
 impl HomunLen for String                                    { fn homun_len(&self) -> usize { self.len() } }
 impl HomunLen for str                                       { fn homun_len(&self) -> usize { self.len() } }
 

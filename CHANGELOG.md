@@ -6,6 +6,29 @@ Branches: `history` (spec drafts), `haskell` (Haskell compiler), `rust` (Rust re
 
 ---
 
+### v0.94 — 2026-08-27 — Rust-interop fixes and host-driven compilation
+
+Every item was found by using Homun for real: a game engine's components and
+systems moved into `.hom`, compiled to cdylibs the engine loads. `report.md`
+records each with a repro. Four new flags let a host drive the compiler instead
+of staging files next to every input.
+
+- `--extern NAME`: `use NAME` references a module the consumer provides instead of inlining it, and the pass-through `use NAME;` is suppressed. Inlining copies a sibling `.rs` into every module that mentions it, so its types become a distinct type per module — the reason a host could not share one `Transform` across a game's systems. `skip_embed` generalised from hom-std to a named dependency
+- `--include DIR` (repeatable): search these after the importing file's own directory, so a host compiles sources without copying their dependencies alongside each input. The file's own directory still wins
+- `--runtime-path PATH`: emit `use PATH::*;` ahead of `--module` output, which called `len!` and `.homun_len()` but imported neither and failed with `no method named homun_len` even though the impl existed
+- `--emit-runtime` now emits an includable fragment: `builtin` + `std` only, so no duplicate `is_alpha`/`is_digit`/`is_alnum`/`is_upper`, no undeclared `regex` dependency, no inner attributes. `re`/`heap`/`chars`/`str_ext`/`dict`/`path`/`fs` are opt-in with `--with NAME`
+- `builtin.rs` / `std/mod.rs`: `HomunIndex` + `HomunLen` for `[T; N]`, so a script reads and measures a Rust `[f32; 3]` field directly. Index assignment was already correct, so only the read path failed — and a host had to define a parallel script-side type and convert per entity per frame
+- `parser.hom`: braced and glob `use` paths pass through (`use engine::{A, B}` failed with `Expected identifier, got LBrace` despite being documented); `token_to_body_str` gained `DoubleColon`, so `@derive(Clone, serde::Deserialize)` no longer emits `serdeDeserialize`
+- `lexer.hom`: `_` starts an identifier when the next character continues one, so `for _p in xs` parses; a bare `_` is still the wildcard
+- `codegen.hom`: `=> _` emits `return;` rather than `return _;`, which rustc rejects
+- new `tests/v94_fixes.rs`; 181 tests pass
+
+Left open in `report.md`: string literals take `.to_string()` in argument
+position, a list literal cannot target an array field, and a script function
+whose name matches a runtime function collides silently.
+
+---
+
 ### v0.93 — 2026-06-13 — `:=` is truly immutable (no reassignment)
 
 `:=` now means an **immutable** binding, enforced end-to-end. Previously `:=` and `::=` were codegen-identical (both emitted `let mut` and silently allowed reassignment), so the immutability `:=` claimed was never enforced. Net diff: **+846 / −501** across 17 files.

@@ -83,6 +83,13 @@ resolve_file := (rs::ResolverState, path: str) -> ResolveFileResult {
       parent_dir := path_parent(canonical)
       imported_names ::= hashset_new()
       has_rs_dep ::= false
+      // `use` lines emitted ahead of the generated code: the runtime import
+      // from --runtime-path, then deps declared external with --extern.
+      extern_lines ::= @[]
+      rt_path := runtime_path_get()
+      if (rt_path != "") {
+        push(extern_lines, "use ${rt_path}::*;")
+      }
 
       // ── Process use statements ───────────────────────────────────────────
       n := len(ast)
@@ -102,9 +109,19 @@ resolve_file := (rs::ResolverState, path: str) -> ResolveFileResult {
               }
 
               if (fd_kind == "Rs") {
-                rs_file_content := expand_rs_file(fd_path)?
-                rs.resolved_rs_content := str_dict_set(rs.resolved_rs_content, dep_name, rs_file_content)
-                has_rs_dep ::= true
+                if (extern_is(dep_name)) {
+                  // Declared external: reference the module the consumer
+                  // provides instead of copying it in, so its types exist
+                  // once for the whole crate.
+                  push(extern_lines, "use super::${dep_name}::*;")
+                  has_rs_dep ::= true
+                  // Suppress the pass-through `use NAME;` codegen would emit.
+                  rs.resolved_hom_names := vec_push(rs.resolved_hom_names, dep_name)
+                } else {
+                  rs_file_content := expand_rs_file(fd_path)?
+                  rs.resolved_rs_content := str_dict_set(rs.resolved_rs_content, dep_name, rs_file_content)
+                  has_rs_dep ::= true
+                }
               }
 
               if (fd_kind == "None") {
@@ -140,7 +157,12 @@ resolve_file := (rs::ResolverState, path: str) -> ResolveFileResult {
         // ── Codegen ─────────────────────────────────────────────────────
         hom_names := hashset_from_vec(rs.resolved_hom_names)
         rs_content_map := rs.resolved_rs_content
-        rust_code := do_codegen(ast, hom_names, rs_content_map)
+        generated := do_codegen(ast, hom_names, rs_content_map)
+        rust_code := if (len(extern_lines) > 0) {
+          join(extern_lines, "\n") + "\n" + generated
+        } else {
+          generated
+        }
 
         // ── Compute exports ──────────────────────────────────────────────
         exports ::= @[]

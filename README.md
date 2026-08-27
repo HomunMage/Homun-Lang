@@ -610,8 +610,41 @@ rustc main.rs -o main        # self-contained, no extra files needed
 
 ```bash
 homunc --emit-runtime > src/runtime.rs
-homunc --module src/types.hom -o out/types.rs
+homunc --runtime-path super::runtime --module src/types.hom -o out/types.rs
 ```
+
+`--emit-runtime` emits `builtin` + `std`: an includable fragment with no
+duplicate definitions, no external crate dependency and no inner attributes. Add
+`re`, `heap`, `chars`, `str_ext`, `dict`, `path` or `fs` with `--with NAME`.
+
+`--module` output uses the runtime's macros and traits, so `--runtime-path PATH`
+tells it where to import them from — `use PATH::*;` is emitted ahead of the
+generated code.
+
+**Referencing a Rust module instead of inlining it** — `--extern NAME` tells the
+compiler that `use NAME` refers to a module the consuming crate already
+provides. Nothing is read or inlined; `use super::NAME::*;` is emitted instead.
+
+```bash
+homunc --extern engine --module src/player.hom -o out/player.rs
+```
+
+Use it for a linked Rust crate. Without it, a sibling `engine.rs` is copied into
+every module that says `use engine`, so its types become a distinct type per
+module. hom-std is unaffected: it has no crate to reference, so it keeps being
+inlined.
+
+**Search path** — `use foo` resolves against the importing file's own directory.
+`--include DIR` (repeatable) adds directories to search after it, so a host can
+compile sources without copying their dependencies alongside every input.
+
+```bash
+homunc --include engine/hom --module game/player.hom -o out/player.rs
+```
+
+The two flags compose: `--include` decides *where* a dependency is found,
+`--extern` decides whether it is inlined or referenced. The file's own directory
+always takes precedence.
 
 ---
 

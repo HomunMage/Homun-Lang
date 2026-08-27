@@ -1145,7 +1145,13 @@ cg_expr := (i: int, sc: Scope, expr: Expr) -> str {
     }
     Expr.Continue -> "continue"
     Expr.EarlyReturn(val) -> {
-      "return " + cg_expr(i, sc, val)
+      // `=> _` is a void early return, and `_` is not an expression in Rust.
+      inner := cg_expr(i, sc, val)
+      if (inner == "_") {
+        "return"
+      } else {
+        "return " + inner
+      }
     }
     Expr.TryUnwrap(inner) -> cg_expr(i, sc, inner) + "?"
     Expr.Range(_, _, _) -> {

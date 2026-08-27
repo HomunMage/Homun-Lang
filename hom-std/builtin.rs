@@ -18,6 +18,16 @@ impl<T: Clone> HomunIndex<i32> for Vec<T> {
     }
 }
 
+/// Fixed-size arrays index like lists. Rust structs that a script touches often
+/// expose `[f32; 3]` fields — a transform's translation, a collider's extents —
+/// and a script should read them without the host defining a parallel type.
+impl<T: Clone, const N: usize> HomunIndex<i32> for [T; N] {
+    type Output = T;
+    fn homun_idx(&self, key: i32) -> T {
+        self[if key < 0 { N as i32 + key } else { key } as usize].clone()
+    }
+}
+
 impl<V: Clone> HomunIndex<i32> for HashMap<i32, V> {
     type Output = V;
     fn homun_idx(&self, key: i32) -> V { self[&key].clone() }

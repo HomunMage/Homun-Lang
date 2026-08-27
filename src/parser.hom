@@ -227,6 +227,7 @@ token_to_body_str := (t: Token) -> str {
     TokenKind.Comma -> ","
     TokenKind.Dot -> "."
     TokenKind.Colon -> ":"
+    TokenKind.DoubleColon -> "::"
     TokenKind.Semi -> ";"
     TokenKind.Underscore -> "_"
     TokenKind.Plus -> "+"
@@ -433,14 +434,66 @@ parse_use := () -> Stmt {
   Stmt.Use(path)
 }
 
+// Collect a balanced `{...}` group verbatim, for Rust pass-through paths such
+// as `use engine::{Transform, Vec3}`. Homun never interprets the contents.
+parse_brace_group := () -> str {
+  ps_expect("LBrace")
+  // Start empty and push, so every element is an owned String.
+  parts ::= @[]
+  push(parts, "{")
+  depth ::= 1
+  done ::= false
+  while (not done) {
+    if (ps_has_err()) {
+      done ::= true
+    } else {
+      t := ps_peek_token()
+      k := ps_peek_kind()
+      if (k == "Eof") {
+        done ::= true
+      } else {
+        if (k == "LBrace") {
+          depth ::= depth + 1
+          push(parts, "{")
+          ps_advance()
+        } else {
+          if (k == "RBrace") {
+            depth ::= depth - 1
+            push(parts, "}")
+            ps_advance()
+            if (depth == 0) { done ::= true }
+          } else {
+            push(parts, token_to_body_str(t))
+            ps_advance()
+          }
+        }
+      }
+    }
+  }
+  join(parts, "")
+}
+
 parse_mod_path := () -> @[str] {
   name := ps_advance_ident()
   if (ps_has_err()) {
     => @[]
   }
   if (ps_consume("DoubleColon")) {
-    rest := parse_mod_path()
-    @[name] + rest
+    nk := ps_peek_kind()
+    if (nk == "LBrace") {
+      // `use a::{B, C}` — a Rust path, passed through untouched.
+      @[name] + @[parse_brace_group()]
+    } else {
+      if (nk == "Star") {
+        ps_advance()
+        glob ::= @[]
+        push(glob, "*")
+        @[name] + glob
+      } else {
+        rest := parse_mod_path()
+        @[name] + rest
+      }
+    }
   } else {
     @[name]
   }

@@ -85,6 +85,67 @@ filter_imports := (args: @[str]) -> @[str] {
 }
 
 
+// ─── collect_flag_values / filter_flag_pairs ─────────────────────────────────
+// Generic "--flag VALUE" handling. Used by --extern.
+
+collect_flag_values := (args: @[str], flag: str) -> @[str] {
+  n := len(args)
+  result ::= @[]
+  i ::= 0
+  while (i < n) {
+    if (args[i] == flag and i + 1 < n) {
+      push(result, args[i + 1])
+      i ::= i + 2
+    } else {
+      i ::= i + 1
+    }
+  }
+  result
+}
+
+filter_flag_pairs := (args: @[str], flag: str) -> @[str] {
+  n := len(args)
+  result ::= @[]
+  i ::= 0
+  while (i < n) {
+    if (args[i] == flag and i + 1 < n) {
+      i ::= i + 2
+    } else {
+      push(result, args[i])
+      i ::= i + 1
+    }
+  }
+  result
+}
+
+
+// ─── register_includes ───────────────────────────────────────────────────────
+// Add each --include directory to the `use` search path, in order.
+
+register_includes := (dirs: @[str]) -> _ {
+  n := len(dirs)
+  i ::= 0
+  while (i < n) {
+    include_dir_add(dirs[i])
+    i ::= i + 1
+  }
+}
+
+
+// ─── register_externs ────────────────────────────────────────────────────────
+// Declare each --extern name, so the resolver references it instead of
+// inlining it.
+
+register_externs := (names: @[str]) -> _ {
+  n := len(names)
+  i ::= 0
+  while (i < n) {
+    extern_register(names[i])
+    i ::= i + 1
+  }
+}
+
+
 // ─── process_imports ─────────────────────────────────────────────────────────
 // Lex+parse each --import file and register its enum types for F9/F12.
 
@@ -119,7 +180,11 @@ print_help := () -> _ {
   print("  homunc <input.hom>                         Compile and print Rust to stdout")
   print("  homunc <input.hom> -o out.rs               Compile and write to file")
   print("  homunc --import types.hom --module src.hom  Register external enum types")
+  print("  homunc --extern engine --module src.hom     Reference a module instead of inlining it")
+  print("  homunc --include DIR --module src.hom       Also search DIR when resolving `use`")
+  print("  homunc --runtime-path super::runtime …      Where generated modules find the runtime")
   print("  homunc --emit-runtime                      Print embedded runtime to stdout")
+  print("  homunc --emit-runtime --with re --with heap Add optional hom-std modules")
   print("  homunc -v, --version                       Show version")
   print("  homunc -h, --help                          Show this message")
   print("")
@@ -248,9 +313,20 @@ main := () -> _ {
   filtered ::= filter_flags(filtered, "--emit-runtime", "--emit-runtime")
   imports := collect_imports(filtered)
   filtered ::= filter_imports(filtered)
+  rt_paths := collect_flag_values(filtered, "--runtime-path")
+  filtered ::= filter_flag_pairs(filtered, "--runtime-path")
+  if (len(rt_paths) > 0) {
+    runtime_path_set(rt_paths[0])
+  }
+  includes := collect_flag_values(filtered, "--include")
+  filtered ::= filter_flag_pairs(filtered, "--include")
+  register_includes(includes)
+  externs := collect_flag_values(filtered, "--extern")
+  filtered ::= filter_flag_pairs(filtered, "--extern")
+  register_externs(externs)
   n := len(filtered)
   if (emit_rt) {
-    emit_runtime_fn()
+    emit_runtime_with(collect_flag_values(args, "--with"))
   } else {
   process_imports(imports)
   if (n == 0) {
