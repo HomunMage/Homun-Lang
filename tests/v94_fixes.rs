@@ -8,7 +8,12 @@ use std::process::Command;
 
 /// Compile a Homun snippet with `--module`; return (success, generated Rust,
 /// combined stdout+stderr). Extra flags go before the input path.
-fn compile_with(src: &str, name: &str, flags: &[&str], files: &[(&str, &str)]) -> (bool, String, String) {
+fn compile_with(
+    src: &str,
+    name: &str,
+    flags: &[&str],
+    files: &[(&str, &str)],
+) -> (bool, String, String) {
     let tmp = PathBuf::from(".tmp/homun_tests").join(format!("v94_{name}"));
     let _ = fs::remove_dir_all(&tmp);
     fs::create_dir_all(&tmp).unwrap();
@@ -69,14 +74,21 @@ fn compile_split(name: &str, flags: &[&str], dep: (&str, &str)) -> (bool, String
         .expect("failed to run homunc");
     let mut log = String::from_utf8_lossy(&out.stdout).into_owned();
     log.push_str(&String::from_utf8_lossy(&out.stderr));
-    (out.status.success(), fs::read_to_string(&rs).unwrap_or_default(), log)
+    (
+        out.status.success(),
+        fs::read_to_string(&rs).unwrap_or_default(),
+        log,
+    )
 }
 
 // ── Braced and glob `use` paths pass through to Rust ─────────────────────────
 
 #[test]
 fn braced_use_path_passes_through() {
-    let (ok, rs, log) = compile("use engine::{Transform, Vec3}\nf := () -> _ { }\n", "braced");
+    let (ok, rs, log) = compile(
+        "use engine::{Transform, Vec3}\nf := () -> _ { }\n",
+        "braced",
+    );
     assert!(ok, "expected success, got:\n{log}");
     assert!(
         rs.contains("use engine::{Transform,Vec3};"),
@@ -125,7 +137,10 @@ fn bare_underscore_is_still_a_wildcard() {
         "wildcard",
     );
     assert!(ok, "expected success, got:\n{log}");
-    assert!(rs.contains("_ =>"), "bare _ should stay a match wildcard, got:\n{rs}");
+    assert!(
+        rs.contains("_ =>"),
+        "bare _ should stay a match wildcard, got:\n{rs}"
+    );
 }
 
 // ── `::` survives an attribute body ─────────────────────────────────────────
@@ -153,32 +168,47 @@ fn void_early_return_in_loop_emits_bare_return() {
     );
     assert!(ok, "expected success, got:\n{log}");
     assert!(rs.contains("return;"), "got:\n{rs}");
-    assert!(!rs.contains("return _"), "`_` is not an expression, got:\n{rs}");
+    assert!(
+        !rs.contains("return _"),
+        "`_` is not an expression, got:\n{rs}"
+    );
 }
 
 #[test]
 fn valued_early_return_still_returns_its_value() {
-    let (ok, rs, log) = compile("f := (n: int) -> int { if (n > 0) { => 42 }\n  0 }\n", "valret");
+    let (ok, rs, log) = compile(
+        "f := (n: int) -> int { if (n > 0) { => 42 }\n  0 }\n",
+        "valret",
+    );
     assert!(ok, "expected success, got:\n{log}");
     assert!(rs.contains("return 42"), "got:\n{rs}");
 }
 
 // ── --extern references a module instead of inlining it ─────────────────────
 
-const SHIM: &str = "pub struct Transform { pub y: f32 }\npub fn action(name: String) -> bool { false }\n";
+const SHIM: &str =
+    "pub struct Transform { pub y: f32 }\npub fn action(name: String) -> bool { false }\n";
 const SRC: &str = "use engine\ng := (t: Transform) -> _ { if (action(\"jump\")) { print(t.y) } }\n";
 
 #[test]
 fn without_extern_a_sibling_rs_is_inlined() {
     let (ok, rs, log) = compile_with(SRC, "noextern", &[], &[("engine.rs", SHIM)]);
     assert!(ok, "expected success, got:\n{log}");
-    assert!(rs.contains("pub fn action"), "should inline the shim, got:\n{rs}");
+    assert!(
+        rs.contains("pub fn action"),
+        "should inline the shim, got:\n{rs}"
+    );
     assert!(!rs.contains("use super::engine"), "got:\n{rs}");
 }
 
 #[test]
 fn with_extern_the_module_is_referenced_not_inlined() {
-    let (ok, rs, log) = compile_with(SRC, "extern", &["--extern", "engine"], &[("engine.rs", SHIM)]);
+    let (ok, rs, log) = compile_with(
+        SRC,
+        "extern",
+        &["--extern", "engine"],
+        &[("engine.rs", SHIM)],
+    );
     assert!(ok, "expected success, got:\n{log}");
     assert!(
         rs.contains("use super::engine::*;"),
@@ -194,7 +224,12 @@ fn with_extern_the_module_is_referenced_not_inlined() {
 /// or the generated module fails to compile.
 #[test]
 fn with_extern_no_stray_pass_through_use() {
-    let (ok, rs, log) = compile_with(SRC, "nostray", &["--extern", "engine"], &[("engine.rs", SHIM)]);
+    let (ok, rs, log) = compile_with(
+        SRC,
+        "nostray",
+        &["--extern", "engine"],
+        &[("engine.rs", SHIM)],
+    );
     assert!(ok, "expected success, got:\n{log}");
     assert!(
         !rs.lines().any(|l| l.trim() == "use engine;"),
@@ -205,7 +240,12 @@ fn with_extern_no_stray_pass_through_use() {
 /// --extern names a dependency, so an unrelated name keeps being inlined.
 #[test]
 fn extern_only_affects_the_named_dependency() {
-    let (ok, rs, log) = compile_with(SRC, "othername", &["--extern", "somethingelse"], &[("engine.rs", SHIM)]);
+    let (ok, rs, log) = compile_with(
+        SRC,
+        "othername",
+        &["--extern", "somethingelse"],
+        &[("engine.rs", SHIM)],
+    );
     assert!(ok, "expected success, got:\n{log}");
     assert!(rs.contains("pub fn action"), "got:\n{rs}");
     assert!(!rs.contains("use super::engine"), "got:\n{rs}");
@@ -239,8 +279,14 @@ fn include_with_extern_pulls_the_dependency_as_an_import() {
         ("engine.rs", SHIM),
     );
     assert!(ok, "expected success, got:\n{log}");
-    assert!(rs.contains("use super::engine::*;"), "should reference, got:\n{rs}");
-    assert!(!rs.contains("pub fn action"), "should not inline, got:\n{rs}");
+    assert!(
+        rs.contains("use super::engine::*;"),
+        "should reference, got:\n{rs}"
+    );
+    assert!(
+        !rs.contains("pub fn action"),
+        "should not inline, got:\n{rs}"
+    );
 }
 
 /// The input's own directory still wins over the search path.
@@ -250,7 +296,11 @@ fn the_inputs_own_directory_takes_precedence() {
     let _ = fs::remove_dir_all(&tmp);
     fs::create_dir_all(tmp.join("game")).unwrap();
     fs::create_dir_all(tmp.join("dep")).unwrap();
-    fs::write(tmp.join("dep").join("engine.rs"), "pub fn action(n: String) -> bool { true }\n").unwrap();
+    fs::write(
+        tmp.join("dep").join("engine.rs"),
+        "pub fn action(n: String) -> bool { true }\n",
+    )
+    .unwrap();
     fs::write(
         tmp.join("game").join("engine.rs"),
         "pub struct Transform { pub y: f32 }\npub fn action(name: String) -> bool { false }\n// LOCAL\n",
@@ -371,7 +421,10 @@ fn runtime_path_is_imported_by_module_output() {
 
 #[test]
 fn without_runtime_path_nothing_is_imported() {
-    let (ok, rs, log) = compile("use std\nf := (xs: @[int]) -> int { len(xs) }\n", "nortpath");
+    let (ok, rs, log) = compile(
+        "use std\nf := (xs: @[int]) -> int { len(xs) }\n",
+        "nortpath",
+    );
     assert!(ok, "expected success, got:\n{log}");
     assert!(!rs.contains("use super::runtime"), "got:\n{rs}");
 }
@@ -407,8 +460,14 @@ fn array_fields_are_indexable_and_measurable() {
                axes := (t: Transform) -> int { len(t.translation) }\n";
     let (ok, rs, log) = compile_with(src, "arrayidx", &[], &[("engine.rs", ARRAY_SHIM)]);
     assert!(ok, "expected success, got:\n{log}");
-    assert!(rs.contains("t.translation.homun_idx(1)"), "read, got:\n{rs}");
-    assert!(rs.contains("t.translation[1 as usize] ="), "index-assign, got:\n{rs}");
+    assert!(
+        rs.contains("t.translation.homun_idx(1)"),
+        "read, got:\n{rs}"
+    );
+    assert!(
+        rs.contains("t.translation[1 as usize] ="),
+        "index-assign, got:\n{rs}"
+    );
     assert!(rs.contains("len!(t.translation)"), "len, got:\n{rs}");
 }
 
